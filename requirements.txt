@@ -1,0 +1,4 @@
+-e submodules/simple-knn
+-e submodules/diff-gaussian-rasterization
+plyfile
+

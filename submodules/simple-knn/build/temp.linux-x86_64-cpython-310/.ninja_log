@@ -1,0 +1,4 @@
+# ninja log v5
+0	12467	1739474264311275041	/home/shashank/Documents/UniBonn/thesis/GS/dynamic_gs/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/simple_knn.o	3e94c0acc12d90e7
+0	23574	1739474275415642969	/home/shashank/Documents/UniBonn/thesis/GS/dynamic_gs/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/ext.o	566cfd0b9637d8b5
+1	47821	1739474299648432415	/home/shashank/Documents/UniBonn/thesis/GS/dynamic_gs/submodules/simple-knn/build/temp.linux-x86_64-cpython-310/spatial.o	4e54146831d99dbb
