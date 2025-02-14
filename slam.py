@@ -67,7 +67,7 @@ if __name__ == "__main__":
             img = dataset.getImage(img_id)
             img_right = dataset.getImageColorRight(img_id) if dataset.sensor_type == SensorType.STEREO else None
             depth_img = dataset.getDepth(img_id) * depth_scale # Some scaling
-            print("depth_img: ", depth_img[50])
+            # print("depth_img: ", depth_img[50])
             print("Max depth: ", np.max(depth_img))
             logging.debug("img_id: %d", img_id)
 
@@ -165,6 +165,8 @@ if __name__ == "__main__":
             ref_point_cloud:  (257067, 3)
             '''
 
+            print("Number of keypoints in ref image: ", len(kpts0))
+            print("Number of keypoints in curr image: ", len(kpts1))
             # Plot matches on the image 
             matched_image = visualize_matches(ref_img, img, kpts0, kpts1, matches)
 
@@ -188,6 +190,8 @@ if __name__ == "__main__":
             # Convert to numpy for OpenCV
             kpts0_np = kpts0.cpu().numpy()
             kpts1_np = kpts1.cpu().numpy()
+            print("kpts0_np: ", kpts0_np)   
+            print("kpts1_np: ", kpts1_np)
             m_kpts0_np = m_kpts0.cpu().numpy()
             m_kpts1_np = m_kpts1.cpu().numpy()
             matches_np = matches.cpu().numpy()
@@ -245,19 +249,114 @@ if __name__ == "__main__":
 
 
             idxs_ref, idxs_curr = matches_np[:, 0], matches_np[:, 1]
+            # Create a two dictionaries with idxs of ref and curr images mapped to each other
+            idxs_ref_dict = dict(zip(idxs_ref, idxs_curr))
+            idxs_curr_dict = dict(zip(idxs_curr, idxs_ref))
+            print("idxs_ref_dict: ", len(idxs_ref_dict))
+            print("idxs_curr_dict: ", len(idxs_curr_dict))
             print("idxs_ref: ", len(idxs_ref))
+            print("idxs_curr: ", len(idxs_curr))
             idxs_ref, idxs_curr = remove_duplicates_from_index_arrays(idxs_ref, idxs_curr)
             print("idxs_ref after removing duplicates: ", len(idxs_ref))  
-
+            print("Len of kpts0_np: ", len(kpts0_np))
+            print("Len of idxs_ref: ", len(idxs_ref))
             if len(idxs_curr) > 3 and len(idxs_ref) > 3:
                 # Now applying Delaunay triangulation on the matched keypoints 
-                _, _, prev_delaunay_img = delaunay_with_kps_new(ref_img_np, kpts0_np, idxs_ref)
-                _, _, curr_delaunay_img = delaunay_with_kps_new(img.permute(1, 2, 0).cpu().numpy(), kpts1_np, idxs_curr)
+                prev_tri_simplicies, prev_tri_vertices, prev_delaunay_img = delaunay_with_kps_new(ref_img_np, kpts0_np, idxs_ref)
+                curr_tri_simplicies, curr_tri_vertices, curr_delaunay_img = delaunay_with_kps_new(img.permute(1, 2, 0).cpu().numpy(), kpts1_np, idxs_curr)
                 if Parameters.kShowDebugImages:
                     delaunay_visualization(prev_delaunay_img, curr_delaunay_img)
-                    # delaunay_visualization(c_prev_delaunay_img, c_curr_delaunay_img)      
-
             
+
+            def create_idxs_pairs(simplicies):
+                idxs_pairs = []
+                for simplex in simplicies:
+                    a,b,c = simplex
+                    for i in range(3):
+                        # If (a,b) or (b,a) is not in the list, add it; else skip
+                        if (a,b) not in idxs_pairs and (b,a) not in idxs_pairs:
+                            idxs_pairs.append((a,b))
+                        if (b,c) not in idxs_pairs and (c,b) not in idxs_pairs:
+                            idxs_pairs.append((b,c))
+                        if (c,a) not in idxs_pairs and (a,c) not in idxs_pairs:
+                            idxs_pairs.append((c,a))
+                return idxs_pairs
+
+            # Create a dict of idxs as keys with connected idxs as values for both the delaunay triangles
+            prev_idxs_pairs = create_idxs_pairs(prev_tri_simplicies)
+            curr_idxs_pairs = create_idxs_pairs(curr_tri_simplicies)
+            # print("prev_idxs_dict: ", prev_idxs_pairs)
+            # print("curr_idxs_dict: ", curr_idxs_pairs)
+            print("prev_idxs_pairs: ", len(prev_idxs_pairs))
+            print("curr_idxs_pairs: ", len(curr_idxs_pairs))
+
+            ## Finding common pairs in both the images
+            # Convert prev_idxs_pairs to be able to map with curr_idxs_pairs
+            # print("idxs_ref_dict: ", idxs_ref_dict.keys())
+            # print("idxs_curr_dict: ", idxs_curr_dict.keys())
+            # print("prev_idxs_pairs: ", prev_idxs_pairs)
+            prev_converted_idxs_pairs = []
+            for idx_pair in prev_idxs_pairs:
+                a,b = idx_pair
+                if a in idxs_ref_dict and b in idxs_ref_dict:
+                    prev_converted_idxs_pairs.append((idxs_ref_dict[a], idxs_ref_dict[b]))
+                else:
+                    "This is not possible because we only have matched keypoints" 
+                    # Error and break the program - catch error
+                    break
+
+            # print("prev_converted_idxs_pairs: ", prev_converted_idxs_pairs)
+            print("prev_converted_idxs_pairs: ", len(prev_converted_idxs_pairs))
+            common_pairs = []
+            for idx_pair in prev_converted_idxs_pairs:
+                # Check for both (a,b) and (b,a) in curr_idxs_pairs - if one of them is present, add to common_pairs
+                a,b = idx_pair
+                if (a,b) in curr_idxs_pairs or (b,a) in curr_idxs_pairs:
+                    common_pairs.append((a,b))
+            # print("common_pairs: ", common_pairs)
+            print("common_pairs: ", len(common_pairs))
+
+            # Common pairs in previous using the dictionary
+            common_pairs_prev = []
+            for pair in common_pairs:
+                a,b = pair
+                # Convert to prev_idxs using the dictionary idxs_curr_dict
+                a_prev = idxs_curr_dict[a]
+                b_prev = idxs_curr_dict[b]
+                common_pairs_prev.append((a_prev, b_prev))
+            print("common_pairs_prev: ", len(common_pairs_prev))
+
+
+
+
+
+            print("prev_tri_indices: ", prev_tri_simplicies[0])
+            print("prev_tri_vertices: ", prev_tri_vertices[0])
+            print("curr_tri_indices: ", curr_tri_simplicies[0])
+            print("curr_tri_vertices: ", curr_tri_vertices[0])
+            # Print max value in the indices, vertices
+            print("Max value in prev_tri_indices: ", np.max(prev_tri_simplicies))
+            print("Max value in prev_tri_vertices: ", np.max(prev_tri_vertices))
+            print("Max value in curr_tri_indices: ", np.max(curr_tri_simplicies))
+            print("Max value in curr_tri_vertices: ", np.max(curr_tri_vertices))
+
+
+            def visualize_common_edges(img, kpts, common_pairs):
+                img = img.copy()
+                for pair in common_pairs:
+                    a,b = pair
+                    cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,255,0), 2)
+                return img
+
+            # Visualize common edges
+            prev_img_with_edges = visualize_common_edges(ref_img_np, kpts0_np, common_pairs_prev)
+            curr_img_with_edges = visualize_common_edges(img.permute(1, 2, 0).cpu().numpy(), kpts1_np, common_pairs)
+            cv2.imshow("Prev_img_with_edges", prev_img_with_edges)
+            cv2.imshow("Curr_img_with_edges", curr_img_with_edges)
+            cv2.waitKey(2)
+
+
+
             
             '''
             if success:
@@ -279,80 +378,80 @@ if __name__ == "__main__":
 
 
         
-        if img_id > starting_img_id + 15: 
-            # Create visualizer
-            vis = o3d.visualization.Visualizer()
-            vis.create_window()
+        # if img_id > starting_img_id + 5: 
+        #     # Create visualizer
+        #     vis = o3d.visualization.Visualizer()
+        #     vis.create_window()
 
-            # Create a single point cloud from all frames
-            global_map = o3d.geometry.PointCloud()
-            all_points = []
-            all_colors = []
+        #     # Create a single point cloud from all frames
+        #     global_map = o3d.geometry.PointCloud()
+        #     all_points = []
+        #     all_colors = []
 
-            # Transform and combine all point clouds
-            for frame_id, points in accumulated_clouds.items():
-                if frame_id in skipped_frames or frame_id in invalid_frames:
-                    continue
-                if frame_id not in global_poses:
-                    continue
-                if np.array_equal(global_poses[frame_id], np.eye(4)):  # Skip identity poses
-                    continue
+        #     # Transform and combine all point clouds
+        #     for frame_id, points in accumulated_clouds.items():
+        #         if frame_id in skipped_frames or frame_id in invalid_frames:
+        #             continue
+        #         if frame_id not in global_poses:
+        #             continue
+        #         if np.array_equal(global_poses[frame_id], np.eye(4)):  # Skip identity poses
+        #             continue
                     
-                # Get points and colors
-                pts = points.points
-                colors = points.colors
+        #         # Get points and colors
+        #         pts = points.points
+        #         colors = points.colors
                 
-                # Convert points to homogeneous coordinates
-                pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
+        #         # Convert points to homogeneous coordinates
+        #         pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
                 
-                # Transform points using global pose
-                transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
+        #         # Transform points using global pose
+        #         transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
                 
-                all_points.append(transformed_pts)
-                all_colors.append(colors)
+        #         all_points.append(transformed_pts)
+        #         all_colors.append(colors)
 
-            # Combine all points into single point cloud
-            if all_points:
-                global_map.points = o3d.utility.Vector3dVector(np.vstack(all_points))
-                global_map.colors = o3d.utility.Vector3dVector(np.vstack(all_colors))
+        #     # Combine all points into single point cloud
+        #     if all_points:
+        #         global_map.points = o3d.utility.Vector3dVector(np.vstack(all_points))
+        #         global_map.colors = o3d.utility.Vector3dVector(np.vstack(all_colors))
                 
-                # Optional: Downsample to reduce density
-                global_map = global_map.voxel_down_sample(voxel_size=0.05)
+        #         # Optional: Downsample to reduce density
+        #         global_map = global_map.voxel_down_sample(voxel_size=0.1)
                 
-                # Add point cloud to visualizer
-                vis.add_geometry(global_map)
+        #         # Add point cloud to visualizer
+        #         vis.add_geometry(global_map)
 
-                # Add camera poses as coordinate frames
-                for frame_id, pose in global_poses.items():
-                    cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-                    cam_frame.transform(pose)
-                    vis.add_geometry(cam_frame)
+        #         # Add camera poses as coordinate frames
+        #         for frame_id, pose in global_poses.items():
+        #             cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+        #             cam_frame.transform(pose)
+        #             vis.add_geometry(cam_frame)
 
-                # Add trajectory visualization
-                points = []
-                for pose in global_poses.values():
-                    points.append(pose[:3, 3])
+        #         # Add trajectory visualization
+        #         points = []
+        #         for pose in global_poses.values():
+        #             points.append(pose[:3, 3])
 
-                if points:
-                    # Create trajectory line set
-                    trajectory = o3d.geometry.LineSet()
-                    trajectory.points = o3d.utility.Vector3dVector(points)
-                    trajectory.lines = o3d.utility.Vector2iVector([[i, i+1] for i in range(len(points)-1)])
-                    trajectory.paint_uniform_color([1, 0, 0])  # Red color
-                    vis.add_geometry(trajectory)
+        #         if points:
+        #             # Create trajectory line set
+        #             trajectory = o3d.geometry.LineSet()
+        #             trajectory.points = o3d.utility.Vector3dVector(points)
+        #             trajectory.lines = o3d.utility.Vector2iVector([[i, i+1] for i in range(len(points)-1)])
+        #             trajectory.paint_uniform_color([1, 0, 0])  # Red color
+        #             vis.add_geometry(trajectory)
 
-                # Add world coordinate frame
-                world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
-                vis.add_geometry(world_frame)
+        #         # Add world coordinate frame
+        #         world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
+        #         vis.add_geometry(world_frame)
 
-                # Set view control
-                vis.get_view_control().set_zoom(0.5)
-                vis.get_view_control().set_front([0, 0, -1])
-                vis.get_view_control().set_up([0, -1, 0])
+        #         # Set view control
+        #         vis.get_view_control().set_zoom(0.5)
+        #         vis.get_view_control().set_front([0, 0, -1])
+        #         vis.get_view_control().set_up([0, -1, 0])
 
-                # Run visualizer
-                vis.run()
-                vis.destroy_window()
-            break
+        #         # Run visualizer
+        #         vis.run()
+        #         vis.destroy_window()
+        #     break
 
         img_id += 1

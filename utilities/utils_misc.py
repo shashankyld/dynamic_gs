@@ -162,32 +162,63 @@ def remove_duplicates_from_index_arrays(idxs_ref, idxs_cur):
 
 
 def delaunay_with_kps_new(img, kps, idxs, all_kps=False):
+    original_kps = kps.copy()
+    print("length of kps passed to delaunay_with_kps_new", len(kps))
     if len(idxs) == 0:
         print("Warning: No keypoints available for Delaunay triangulation.")
         return None
 
     if not all_kps:
         kps = kps[idxs]
+    print("length of kps after idxs masked passed to delaunay_with_kps_new", len(kps))
 
     if len(kps) < 3:  # Delaunay needs at least 3 points
         print("Warning: Not enough points for triangulation.")
         return None
 
-    # Convert to int if necessary
-    kps = kps.astype(np.int32)
+    # Convert to int if necessary - NOT NEEDED
+    
 
     # Perform Delaunay triangulation
-    tri = Delaunay(kps)
-    tri_indices = tri.simplices
-    tri_vertices = kps[tri_indices]
+    tri = Delaunay(kps) # Floating point coordinates
+    tri_simplicies = tri.simplices  
+    # These are ranging from 0-N but the idxs are the original indices of the keypoints 
+    # So, create a fake a tri_simplicies but with the original indices of the keypoints
+    fake_tri_simplicies = np.zeros_like(tri_simplicies)
+    for i in range(len(kps)):
+        # Find idx where kps[i] is present in original_kps
+        a, b, c = tri_simplicies[i]
+        idx_original_a = np.where((original_kps == kps[a]).all(axis=1))[0][0]
+        idx_original_b = np.where((original_kps == kps[b]).all(axis=1))[0][0]
+        idx_original_c = np.where((original_kps == kps[c]).all(axis=1))[0][0]
+        fake_tri_simplicies[i] = [idx_original_a, idx_original_b, idx_original_c]
+
+
+    """ 
+    indices of the points in kps that form the triangles
+    array([[2, 3, 0],                 
+       [3, 1, 0]], dtype=int32)
+    """
+    tri_vertices = kps[tri_simplicies]
+    """ 
+    Actual vertices of the triangles in the image in pixel coordinates - floating point
+    array([[[ 1. ,  0. ],          
+        [ 1. ,  1. ],
+        [ 0. ,  0. ]],
+       [[ 1. ,  1. ],
+        [ 0. ,  1.1],
+        [ 0. ,  0. ]]])
+    """
 
     # Draw triangles
     for tri_vert in tri_vertices:
         tri_vert = np.array(tri_vert, dtype=np.int32)
         cv2.polylines(img, [tri_vert], isClosed=True, color=(0, 255, 0), thickness=1)
 
+    tri_simplicies = fake_tri_simplicies
+
     print("Delaunay triangulation completed.")
-    return tri_indices, tri_vertices, img
+    return tri_simplicies, tri_vertices, img
 
 def delaunay_with_kps(frame, idxs, all_kps=False):
     kps = frame.kps
