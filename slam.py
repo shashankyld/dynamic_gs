@@ -41,6 +41,7 @@ if __name__ == "__main__":
     img_id = starting_img_id
 
     global_poses = {}
+    accumulated_clouds = {}
     while True: 
 
 
@@ -81,6 +82,8 @@ if __name__ == "__main__":
             logging.debug("img is None")
 
         global_poses[img_id] = np.eye(4)
+        if img is not None:
+            accumulated_clouds[img_id] = point_cloud
 
         # Comparing [0-N, 1-N+1, 2-2+N, 3-3+N, .....]
         if img_id > starting_img_id + Parameters.kNumFramesAway - 1:
@@ -190,11 +193,28 @@ if __name__ == "__main__":
 
 
             # TRACK POSE
+            '''
             T = estimate_pose_icp(prev_point_cloud.points, point_cloud.points)
             # Add to global poses
             global_poses[img_id] = T @ global_poses[img_id - 1]
             print("Global pose at ", img_id, ":\n", global_poses[img_id])
+            '''
 
+            # For now using GT poses for global poses. 
+            # Get pose from groundtruth (timestamp, x,y,z, qx,qy,qz,qw, scale)
+            timestamp = dataset.getTimestamp()
+            if groundtruth is not None:
+                T = groundtruth.getClosestPose(timestamp)
+                if T is None:
+                    print(f"Warning: No ground truth pose found for timestamp {timestamp}")
+                    T = np.eye(4)
+            else:
+                print("Warning: No ground truth available, using identity pose")
+                T = np.eye(4)
+            
+            # Add to global poses
+            global_poses[img_id] = T
+            print("Global pose at ", img_id, ":\n", global_poses[img_id])
 
             # TRACK DYNAMIC OBJECTS
             # print("Matches: ", matches_np)
@@ -235,6 +255,58 @@ if __name__ == "__main__":
             '''
 
 
-            
+        
+        if img_id > starting_img_id + 15: 
+            # Visualize accumulated point clouds
+            vis = o3d.visualization.Visualizer()
+            vis.create_window()
+
+            # Combined point cloud
+            combined_pcd = o3d.geometry.PointCloud()
+            combined_points = []
+            combined_colors = []
+
+            # Transform and combine all point clouds
+            for frame_id, pcd in accumulated_clouds.items():
+                if frame_id in global_poses:
+                    # Convert points to homogeneous coordinates
+                    points = np.asarray(pcd.points)
+                    colors = np.asarray(pcd.colors)
+                    
+                    # Add homogeneous coordinate (1) to each point
+                    points_homog = np.hstack((points, np.ones((points.shape[0], 1))))
+                    
+                    # Transform points using global pose
+                    transformed_points = (global_poses[frame_id] @ points_homog.T).T
+                    
+                    # Remove homogeneous coordinate
+                    transformed_points = transformed_points[:, :3]
+                    
+                    combined_points.append(transformed_points)
+                    combined_colors.append(colors)
+
+            # Combine all points and colors
+            if combined_points:
+                all_points = np.vstack(combined_points)
+                all_colors = np.vstack(combined_colors)
+                
+                combined_pcd.points = o3d.utility.Vector3dVector(all_points)
+                combined_pcd.colors = o3d.utility.Vector3dVector(all_colors)
+
+                # Add geometry to visualizer
+                vis.add_geometry(combined_pcd)
+
+                # Optional: add coordinate frame
+                coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
+                vis.add_geometry(coord_frame)
+
+                # Set view
+                vis.get_view_control().set_front([0, 0, -1])
+                vis.get_view_control().set_up([0, -1, 0])
+
+                # Run visualizer
+                vis.run()
+                vis.destroy_window()
+            break
 
         img_id += 1
