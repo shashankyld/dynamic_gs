@@ -10,7 +10,8 @@ from thirdparty.gaussian_splatting.scene.gaussian_model import GaussianModel
 from thirdparty.gaussian_splatting.utils.general_utils import build_rotation
 from thirdparty.gaussian_splatting.utils.dataset_bridge import get_camera_info_from_pyslam_dataloader_insteadofgs
 from munch import Munch
-
+# Import time 
+from datetime import datetime
 import os
 import torch
 import numpy as np
@@ -82,6 +83,8 @@ gaussian_model.extend_from_pcd(fused_point_cloud, features, scales, rots, opacit
 
 print("Optimizer: ", gaussian_model.optimizer)
 
+current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+save_path = os.getcwd() + "/" + current_time
 # 4. Training Loop
 for iteration in tqdm(range(num_iterations)):
     # a. Render
@@ -125,13 +128,15 @@ for iteration in tqdm(range(num_iterations)):
 
     # f. Print or log loss
     print(f"Iteration: {iteration}, Loss: {loss.item()}")
-
+    
+    
     # g. (Optional) Save rendered images or model checkpoints
-    if iteration % 10 == 0:  # Save every 10 iterations
+    if iteration % 200 == 0:  # Save every 10 iterations
         rendered_image_cpu = rendered_image.cpu().detach().numpy().transpose(1, 2, 0)
         rendered_image_cpu = (rendered_image_cpu * 255).astype(np.uint8)
-        cv2.imwrite(f"rendered_{iteration}.png", rendered_image_cpu)
-        gaussian_model.save_ply(os.path.join(os.getcwd(), f"model_{iteration}.ply"))
+        cv2.imwrite(os.path.join(save_path, f"render_{iteration}.png"), rendered_image_cpu)
+        
+        gaussian_model.save_ply(os.path.join(save_path, f"model_{iteration}.ply"))
 
 # 5. (After training) Render final result or save model
 final_render = render(camera_info, gaussian_model, None, background_color)["render"]
