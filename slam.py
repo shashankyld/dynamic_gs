@@ -17,6 +17,71 @@ import open3d as o3d
 from utilities.utils_misc import *
 import matplotlib.pyplot as plt
 
+def create_histogram_image(data, num_bins=50, value_range=(-20, 20), width=640, height=480):
+    """Create a histogram visualization using OpenCV"""
+    # Calculate histogram
+    hist_counts, bin_edges = np.histogram(data, bins=num_bins, range=value_range)
+    
+    # Normalize histogram to fit in image
+    hist_counts = hist_counts / hist_counts.max() * (height - 40)  # Leave more margin for text
+    
+    # Create image
+    img = np.ones((height, width, 3), dtype=np.uint8) * 255
+    
+    # Draw histogram bars
+    bin_width = int(width / num_bins)
+    for i in range(num_bins):
+        x1 = i * bin_width
+        y1 = height - int(hist_counts[i]) - 20  # Leave space for x-axis labels
+        x2 = (i + 1) * bin_width - 1
+        y2 = height - 20
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), -1)
+    
+    # Draw axes
+    cv2.line(img, (0, height-20), (width-1, height-20), (0,0,0), 2)  # X-axis
+    cv2.line(img, (0, 0), (0, height-20), (0,0,0), 2)  # Y-axis
+    
+    # Add title
+    cv2.putText(img, "Edge Length Differences", (width//3, 30), 
+               cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+
+    # Draw vertical lines at key statistics
+    stats = {
+        'min': np.min(data),
+        'max': np.max(data),
+        'mean': np.mean(data),
+        'median': np.median(data)
+    }
+    
+    colors = {
+        'min': (255, 0, 0),    # Blue
+        'max': (0, 0, 255),    # Red
+        'mean': (0, 165, 255), # Orange
+        'median': (128, 0, 128)  # Purple
+    }
+
+    # Function to convert value to x-coordinate
+    def value_to_x(val):
+        return int((val - value_range[0]) / (value_range[1] - value_range[0]) * width)
+
+    # Draw vertical lines and labels
+    for stat_name, value in stats.items():
+        x_pos = value_to_x(value)
+        if 0 <= x_pos <= width:
+            # Draw vertical line
+            cv2.line(img, (x_pos, 40), (x_pos, height-20), colors[stat_name], 1)
+            # Add value label
+            label = f"{stat_name}: {value:.2f}"
+            # Rotate text position based on position in image to avoid overlap
+            if x_pos < width/2:
+                cv2.putText(img, label, (x_pos+5, 50), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, colors[stat_name], 1)
+            else:
+                cv2.putText(img, label, (x_pos-120, 50), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, colors[stat_name], 1)
+    
+    return img
+
 if __name__ == "__main__":
     config = Config()
     dataset = dataset_factory(config) 
@@ -99,16 +164,6 @@ if __name__ == "__main__":
         if img is not None:
             accumulated_clouds[img_id] = point_cloud
 
-
-        # PLOTTING DISTANCES HISTORGRAM
-        # Initialize the plot outside the loop
-        plt.ion()  # Turn on interactive mode
-        fig, ax = plt.subplots()  # Create figure and axes
-        line, = ax.plot([], []) # Create an empty line object for the plot
-        ax.set_xlabel("Difference in Lengths")
-        ax.set_ylabel("Frequency")
-        ax.set_title("Histogram of Length Differences")
-        histogram = None
 
         # Comparing [0-N, 1-N+1, 2-2+N, 3-3+N, .....]
         if img_id > starting_img_id + Parameters.kNumFramesAway - 1:
@@ -383,22 +438,15 @@ if __name__ == "__main__":
             # Plot these differences in lengths as a histogram - update the plot with the loop
             import matplotlib.pyplot as plt
             # Update the plot
-            if histogram is None:
-                histogram = np.array(lengths_prev) - np.array(lengths_curr)
-                ax.hist(histogram, bins=50)
-                plt.pause(0.1)
-            else:
-                # Delete the previous plot
-                line.remove()
-                # Update the plot
-                histogram = np.array(lengths_prev) - np.array(lengths_curr)
-                ax.hist(histogram, bins=50)
-                plt.pause(0.1)
-            # print("Differences in lengths: ", np.array(lengths_prev) - np.array(lengths_curr))
+            if len(common_pairs_prev) > 0:
+                # Calculate length differences
+                length_diffs = np.array(lengths_prev) - np.array(lengths_curr)
+                
+                # Create and show histogram
+                hist_img = create_histogram_image(length_diffs, num_bins=50)
+                cv2.imshow("Edge Length Differences Histogram", hist_img)
+                cv2.waitKey(2)
 
-            fig.canvas.draw()
-            fig.canvas.flush_events()
-            plt.plot(0.001)
 
 
                 
