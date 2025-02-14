@@ -33,7 +33,18 @@ if __name__ == "__main__":
 
    # Loading Groundtruth trajectory
     if groundtruth is not None:
-        gt_traj3d, gt_timestamps = groundtruth.getFull3dTrajectory()
+        # Initialize with 6D trajectory instead of 3D
+        gt_traj3d, gt_poses, gt_timestamps = groundtruth.getFull6dTrajectory()
+        print("Loaded ground truth:")
+        print("- Trajectory shape:", gt_traj3d.shape if gt_traj3d is not None else "None")
+        print("- Poses shape:", gt_poses.shape if gt_poses is not None else "None")
+        print("- Timestamps range:", gt_timestamps[0], "to", gt_timestamps[-1] if gt_timestamps is not None else "None")
+        
+        # Verify poses are properly loaded
+        if gt_poses is None or len(gt_poses) == 0:
+            print("Error: No ground truth poses loaded!")
+            exit(1)
+
     print("gt_traj3d: ", gt_traj3d.shape)
 
     # Processing the dataset 
@@ -42,6 +53,9 @@ if __name__ == "__main__":
 
     global_poses = {}
     accumulated_clouds = {}
+    invalid_frames = set()
+    skipped_frames = set()  # Track frames we skip due to missing poses
+
     while True: 
 
 
@@ -81,7 +95,6 @@ if __name__ == "__main__":
         else:
             logging.debug("img is None")
 
-        global_poses[img_id] = np.eye(4)
         if img is not None:
             accumulated_clouds[img_id] = point_cloud
 
@@ -203,18 +216,28 @@ if __name__ == "__main__":
             # For now using GT poses for global poses. 
             # Get pose from groundtruth (timestamp, x,y,z, qx,qy,qz,qw, scale)
             timestamp = dataset.getTimestamp()
-            if groundtruth is not None:
-                T = groundtruth.getClosestPose(timestamp)
-                if T is None:
-                    print(f"Warning: No ground truth pose found for timestamp {timestamp}")
-                    T = np.eye(4)
+            if groundtruth is not None and gt_poses is not None and gt_timestamps is not None:
+                print(f"Looking for pose at timestamp: {timestamp}")
+                closest_idx = np.argmin(np.abs(gt_timestamps - timestamp))
+                time_diff = abs(gt_timestamps[closest_idx] - timestamp)
+                
+                if time_diff > 0.1:  # More than 100ms difference
+                    print(f"Warning: Large time difference ({time_diff}s) - skipping frame {img_id}")
+                    skipped_frames.add(img_id)
+                    img_id += 1
+                    continue  # Skip this frame entirely
+                else:
+                    T = gt_poses[closest_idx]
+                    print(f"Found pose at timestamp: {gt_timestamps[closest_idx]}")
+                    print(f"Pose matrix:\n{T}")
+                    # Only add pose if we have a valid one
+                    global_poses[img_id] = T
+                    # Only store point cloud if we have a valid pose
+                    if img is not None:
+                        accumulated_clouds[img_id] = point_cloud
             else:
-                print("Warning: No ground truth available, using identity pose")
-                T = np.eye(4)
-            
-            # Add to global poses
-            global_poses[img_id] = T
-            print("Global pose at ", img_id, ":\n", global_poses[img_id])
+                print("Error: No ground truth available - cannot continue")
+                break  # Stop processing if no ground truth is available
 
             # TRACK DYNAMIC OBJECTS
             # print("Matches: ", matches_np)
@@ -268,19 +291,25 @@ if __name__ == "__main__":
 
             # Transform and combine all point clouds
             for frame_id, points in accumulated_clouds.items():
-                if frame_id in global_poses:
-                    # Get points and colors
-                    pts = points.points
-                    colors = points.colors
+                if frame_id in skipped_frames or frame_id in invalid_frames:
+                    continue
+                if frame_id not in global_poses:
+                    continue
+                if np.array_equal(global_poses[frame_id], np.eye(4)):  # Skip identity poses
+                    continue
                     
-                    # Convert points to homogeneous coordinates
-                    pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
-                    
-                    # Transform points using global pose
-                    transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
-                    
-                    all_points.append(transformed_pts)
-                    all_colors.append(colors)
+                # Get points and colors
+                pts = points.points
+                colors = points.colors
+                
+                # Convert points to homogeneous coordinates
+                pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
+                
+                # Transform points using global pose
+                transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
+                
+                all_points.append(transformed_pts)
+                all_colors.append(colors)
 
             # Combine all points into single point cloud
             if all_points:
