@@ -418,15 +418,61 @@ if __name__ == "__main__":
             # Plot these differences in lengths as a histogram - update the plot with the loop
             import matplotlib.pyplot as plt
             # Update the plot
+            
             if len(common_pairs_prev) > 0:
                 # Calculate length differences
                 length_diffs = np.array(lengths_prev) - np.array(lengths_curr)
+
                 
                 # Create and show histogram
                 hist_img = create_histogram_image(length_diffs, num_bins=50)
                 cv2.imshow("Edge Length Differences Histogram", hist_img)
                 cv2.waitKey(2)
 
+            
+            # Remove the edges which are changing lengths significantly with a threshold
+            dynamic_threshold = 0.5
+            dynamic_edges = []
+            for i in range(len(lengths_prev)):
+                if abs(lengths_prev[i] - lengths_curr[i]) > dynamic_threshold:
+                    dynamic_edges.append(i)
+            print("Dynamic edges: ", dynamic_edges)
+
+            # Visualize dynamic edges
+
+            def visualize_dynamic_edges(img, kpts, common_pairs, dynamic_edges, only_static=False):
+                img = img.copy()
+                # Add number of static and dynamic edges on top rigt
+                cv2.putText(img, f"Static: {len(common_pairs) - len(dynamic_edges)}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.putText(img, f"Dynamic: {len(dynamic_edges)}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+                if only_static:
+                    # Only visualize static edges in green
+                    for i in range(len(common_pairs)):
+                        if i not in dynamic_edges:
+                            a,b = common_pairs[i]
+                            cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,255,0), 2)
+                            
+                    return img
+                # common edges in green and if they are dynamic, in red
+                for i in range(len(common_pairs)):
+                    a,b = common_pairs[i]
+                    if i in dynamic_edges:
+                        cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,0,255), 2)
+                    else:
+                        cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,255,0), 2)
+                return img
+            
+
+
+            curr_img_np = img.permute(1, 2, 0).cpu().numpy()
+            curr_img_with_dynamic_edges = visualize_dynamic_edges(curr_img_np, kpts1_np, common_pairs, dynamic_edges, only_static=False)
+            cv2.imshow("Curr_img_with_dynamic_edges", curr_img_with_dynamic_edges)
+            cv2.waitKey(2)
+
+
+
+            
 
 
                 
