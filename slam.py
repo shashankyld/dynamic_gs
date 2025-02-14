@@ -15,6 +15,7 @@ from utilities.utils_draw import draw_torch_image, visualize_matches
 from utilities.utils_misc import estimate_pose_ransac, estimate_pose_icp
 import open3d as o3d
 from utilities.utils_misc import *
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     config = Config()
@@ -97,6 +98,17 @@ if __name__ == "__main__":
 
         if img is not None:
             accumulated_clouds[img_id] = point_cloud
+
+
+        # PLOTTING DISTANCES HISTORGRAM
+        # Initialize the plot outside the loop
+        plt.ion()  # Turn on interactive mode
+        fig, ax = plt.subplots()  # Create figure and axes
+        line, = ax.plot([], []) # Create an empty line object for the plot
+        ax.set_xlabel("Difference in Lengths")
+        ax.set_ylabel("Frequency")
+        ax.set_title("Histogram of Length Differences")
+        histogram = None
 
         # Comparing [0-N, 1-N+1, 2-2+N, 3-3+N, .....]
         if img_id > starting_img_id + Parameters.kNumFramesAway - 1:
@@ -354,6 +366,42 @@ if __name__ == "__main__":
             cv2.imshow("Prev_img_with_edges", prev_img_with_edges)
             cv2.imshow("Curr_img_with_edges", curr_img_with_edges)
             cv2.waitKey(2)
+
+
+            # Estimate Lengths of these common edges in both the images 
+
+            lengths_prev = []
+            lengths_curr = []
+            for i in range(len(common_pairs_prev)):
+                # We have equal number of common pairs in both the images
+                a,b = common_pairs_prev[i]
+                lengths_prev.append(np.linalg.norm(kpts0_np[a] - kpts0_np[b]))
+                a,b = common_pairs[i]
+                lengths_curr.append(np.linalg.norm(kpts1_np[a] - kpts1_np[b]))
+
+            print("Differences in lengths: ", np.array(lengths_prev) - np.array(lengths_curr))
+            # Plot these differences in lengths as a histogram - update the plot with the loop
+            import matplotlib.pyplot as plt
+            # Update the plot
+            if histogram is None:
+                histogram = np.array(lengths_prev) - np.array(lengths_curr)
+                ax.hist(histogram, bins=50)
+                plt.pause(0.1)
+            else:
+                # Delete the previous plot
+                line.remove()
+                # Update the plot
+                histogram = np.array(lengths_prev) - np.array(lengths_curr)
+                ax.hist(histogram, bins=50)
+                plt.pause(0.1)
+            # print("Differences in lengths: ", np.array(lengths_prev) - np.array(lengths_curr))
+
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+            plt.plot(0.001)
+
+
+                
 
 
 
