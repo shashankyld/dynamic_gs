@@ -261,73 +261,63 @@ if __name__ == "__main__":
             vis = o3d.visualization.Visualizer()
             vis.create_window()
 
-            # Combined point cloud
-            combined_pcd = o3d.geometry.PointCloud()
-            combined_points = []
-            combined_colors = []
+            # Create a single point cloud from all frames
+            global_map = o3d.geometry.PointCloud()
+            all_points = []
+            all_colors = []
 
             # Transform and combine all point clouds
-            for frame_id, pcd in accumulated_clouds.items():
+            for frame_id, points in accumulated_clouds.items():
                 if frame_id in global_poses:
-                    # Convert points to homogeneous coordinates
-                    points = np.asarray(pcd.points)
-                    colors = np.asarray(pcd.colors)
+                    # Get points and colors
+                    pts = points.points
+                    colors = points.colors
                     
-                    # Add homogeneous coordinate (1) to each point
-                    points_homog = np.hstack((points, np.ones((points.shape[0], 1))))
+                    # Convert points to homogeneous coordinates
+                    pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
                     
                     # Transform points using global pose
-                    transformed_points = (global_poses[frame_id] @ points_homog.T).T
+                    transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
                     
-                    # Remove homogeneous coordinate
-                    transformed_points = transformed_points[:, :3]
-                    
-                    combined_points.append(transformed_points)
-                    combined_colors.append(colors)
+                    all_points.append(transformed_pts)
+                    all_colors.append(colors)
 
-            # Combine all points and colors
-            if combined_points:
-                all_points = np.vstack(combined_points)
-                all_colors = np.vstack(combined_colors)
+            # Combine all points into single point cloud
+            if all_points:
+                global_map.points = o3d.utility.Vector3dVector(np.vstack(all_points))
+                global_map.colors = o3d.utility.Vector3dVector(np.vstack(all_colors))
                 
-                combined_pcd.points = o3d.utility.Vector3dVector(all_points)
-                combined_pcd.colors = o3d.utility.Vector3dVector(all_colors)
+                # Optional: Downsample to reduce density
+                global_map = global_map.voxel_down_sample(voxel_size=0.05)
+                
+                # Add point cloud to visualizer
+                vis.add_geometry(global_map)
 
-                # Add geometry to visualizer
-                vis.add_geometry(combined_pcd)
-
-                # Add camera poses visualization
+                # Add camera poses as coordinate frames
                 for frame_id, pose in global_poses.items():
-                    # Create a coordinate frame for each camera pose
-                    cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)  # Small size for camera frames
-                    cam_frame.transform(pose)  # Transform to camera pose
+                    cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+                    cam_frame.transform(pose)
                     vis.add_geometry(cam_frame)
-                
-                # Add camera trajectory
-                trajectory_points = []
+
+                # Add trajectory visualization
+                points = []
                 for pose in global_poses.values():
-                    trajectory_points.append(pose[:3, 3])  # Get camera position (translation part)
-                
-                if trajectory_points:
-                    # Create point cloud for trajectory
-                    trajectory = o3d.geometry.PointCloud()
-                    trajectory.points = o3d.utility.Vector3dVector(np.array(trajectory_points))
-                    trajectory.paint_uniform_color([1, 0, 0])  # Red color for trajectory
+                    points.append(pose[:3, 3])
+
+                if points:
+                    # Create trajectory line set
+                    trajectory = o3d.geometry.LineSet()
+                    trajectory.points = o3d.utility.Vector3dVector(points)
+                    trajectory.lines = o3d.utility.Vector2iVector([[i, i+1] for i in range(len(points)-1)])
+                    trajectory.paint_uniform_color([1, 0, 0])  # Red color
                     vis.add_geometry(trajectory)
 
-                    # Create lines connecting camera positions
-                    lines = [[i, i+1] for i in range(len(trajectory_points)-1)]
-                    line_set = o3d.geometry.LineSet()
-                    line_set.points = trajectory.points
-                    line_set.lines = o3d.utility.Vector2iVector(lines)
-                    line_set.paint_uniform_color([0, 1, 0])  # Green color for lines
-                    vis.add_geometry(line_set)
+                # Add world coordinate frame
+                world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
+                vis.add_geometry(world_frame)
 
-                # Optional: add coordinate frame
-                coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
-                vis.add_geometry(coord_frame)
-
-                # Set view
+                # Set view control
+                vis.get_view_control().set_zoom(0.5)
                 vis.get_view_control().set_front([0, 0, -1])
                 vis.get_view_control().set_up([0, -1, 0])
 
