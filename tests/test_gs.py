@@ -81,7 +81,7 @@ print("opacities", opacities)
 
 gaussian_model.extend_from_pcd(fused_point_cloud, features, scales, rots, opacities, kf_id=0) # kf_id is just an example
 
-print("Optimizer: ", gaussian_model.optimizer)
+# print("Optimizer: ", gaussian_model.optimizer)
 
 current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 save_path = os.getcwd() + "/" + current_time
@@ -139,7 +139,7 @@ for iteration in tqdm(range(num_iterations)):
         gaussian_model.save_ply(os.path.join(save_path, f"model_{iteration}.ply"))
 
 # 5. (After training) Render final result or save model
-final_render = render(camera_info, gaussian_model, None, background_color)["render"]
+final_render = render(camera_info, gaussian_model, pipeline_args, background_color)["render"]
 #... save final_render...
-gaussian_model.save_ply("final_model.ply")
+gaussian_model.save_ply(os.path.join(save_path, "final_model.ply"))
 

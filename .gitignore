@@ -1,7 +1,9 @@
 # Log data directories
 2025*/
 multiframe*/
+masked*/
 
 # Specific file patterns
 2025*.*
 multiframe*.*
+masked*.*

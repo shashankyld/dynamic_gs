@@ -106,10 +106,10 @@ class GaussianModel:
 
     def create_pcd_from_image(self, cam_info, init=False, scale=2.0, depthmap=None):
         cam = cam_info
-        print(type(cam.exposure_a))
-        print(type(cam.original_image))
-        print(cam.exposure_a)
-        print(cam.original_image)
+        # print(type(cam.exposure_a))
+        # print(type(cam.original_image))
+        # print(cam.exposure_a)
+        # print(cam.original_image)
         image_ab = (torch.exp(cam.exposure_a)) * cam.original_image + cam.exposure_b
         image_ab = torch.clamp(image_ab, 0.0, 1.0)
         rgb_raw = (image_ab * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy()
@@ -117,6 +117,8 @@ class GaussianModel:
         if depthmap is not None:
             print("Depthmap is not none")
             rgb = o3d.geometry.Image(rgb_raw.astype(np.uint8))
+            # Convert to numpy array
+            depthmap = depthmap.cpu().numpy()
             depth = o3d.geometry.Image(depthmap.astype(np.float32))
         else:
             depth_raw = cam.depth
@@ -228,6 +230,34 @@ class GaussianModel:
 
         return fused_point_cloud, features, scales, rots, opacities
 
+    def create_pcd_from_image_mask(self, camera_info, depthmap, mask):
+        """Create point cloud from image with mask (1 for valid pixels, 0 for masked)"""
+        # Convert inputs to correct format if needed
+        if not isinstance(mask, torch.Tensor):
+            mask = torch.from_numpy(mask).to(self.device)
+        if not isinstance(depthmap, torch.Tensor):
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            depthmap = torch.from_numpy(depthmap).to(device)
+            
+        # Apply mask to depth map
+        masked_depth = depthmap.clone()
+        masked_depth[~mask.bool()] = 0
+        
+        # Use existing point cloud creation with masked depth
+        return self.create_pcd_from_image(camera_info, depthmap=masked_depth)
+
+    def compute_masked_loss(self, rendered_image, target_image, mask):
+        """Compute L1 loss only on unmasked regions"""
+        mask = mask.bool()
+        mask_expanded = mask.unsqueeze(0).repeat(3, 1, 1)
+        
+        rendered_valid = rendered_image[mask_expanded]
+        target_valid = target_image[mask_expanded]
+        
+        if len(rendered_valid) > 0:
+            return torch.nn.functional.l1_loss(rendered_valid, target_valid)
+        return torch.tensor(0.0).to(rendered_image.device)
+
     def init_lr(self, spatial_lr_scale):
         self.spatial_lr_scale = spatial_lr_scale
 
@@ -305,7 +335,7 @@ class GaussianModel:
                 "name": "rotation",
             },
         ]
-        print('l: ', l)
+        # print('l: ', l)
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(
