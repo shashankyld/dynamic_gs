@@ -257,7 +257,7 @@ if __name__ == "__main__":
 
         
         if img_id > starting_img_id + 15: 
-            # Visualize accumulated point clouds
+            # Create visualizer
             vis = o3d.visualization.Visualizer()
             vis.create_window()
 
@@ -295,6 +295,33 @@ if __name__ == "__main__":
 
                 # Add geometry to visualizer
                 vis.add_geometry(combined_pcd)
+
+                # Add camera poses visualization
+                for frame_id, pose in global_poses.items():
+                    # Create a coordinate frame for each camera pose
+                    cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)  # Small size for camera frames
+                    cam_frame.transform(pose)  # Transform to camera pose
+                    vis.add_geometry(cam_frame)
+                
+                # Add camera trajectory
+                trajectory_points = []
+                for pose in global_poses.values():
+                    trajectory_points.append(pose[:3, 3])  # Get camera position (translation part)
+                
+                if trajectory_points:
+                    # Create point cloud for trajectory
+                    trajectory = o3d.geometry.PointCloud()
+                    trajectory.points = o3d.utility.Vector3dVector(np.array(trajectory_points))
+                    trajectory.paint_uniform_color([1, 0, 0])  # Red color for trajectory
+                    vis.add_geometry(trajectory)
+
+                    # Create lines connecting camera positions
+                    lines = [[i, i+1] for i in range(len(trajectory_points)-1)]
+                    line_set = o3d.geometry.LineSet()
+                    line_set.points = trajectory.points
+                    line_set.lines = o3d.utility.Vector2iVector(lines)
+                    line_set.paint_uniform_color([0, 1, 0])  # Green color for lines
+                    vis.add_geometry(line_set)
 
                 # Optional: add coordinate frame
                 coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
