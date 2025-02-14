@@ -106,38 +106,55 @@ class GaussianModel:
 
     def create_pcd_from_image(self, cam_info, init=False, scale=2.0, depthmap=None):
         cam = cam_info
+        print(type(cam.exposure_a))
+        print(type(cam.original_image))
+        print(cam.exposure_a)
+        print(cam.original_image)
         image_ab = (torch.exp(cam.exposure_a)) * cam.original_image + cam.exposure_b
         image_ab = torch.clamp(image_ab, 0.0, 1.0)
         rgb_raw = (image_ab * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy()
 
         if depthmap is not None:
+            print("Depthmap is not none")
             rgb = o3d.geometry.Image(rgb_raw.astype(np.uint8))
             depth = o3d.geometry.Image(depthmap.astype(np.float32))
         else:
             depth_raw = cam.depth
+            
             if depth_raw is None:
                 depth_raw = np.empty((cam.image_height, cam.image_width))
 
-            if self.config["Dataset"]["sensor_type"] == "monocular":
+            if self.config.dataset_settings['sensor_type'].lower() == "mono":
                 depth_raw = (
                     np.ones_like(depth_raw)
                     + (np.random.randn(depth_raw.shape[0], depth_raw.shape[1]) - 0.5)
                     * 0.05
                 ) * scale
 
+            # print("Image raw: ", rgb_raw)
+            # print("depth raw: ", depth_raw)
+
             rgb = o3d.geometry.Image(rgb_raw.astype(np.uint8))
             depth = o3d.geometry.Image(depth_raw.astype(np.float32))
+
+            # print("rgb: ", rgb)
+            # print("depth: ", depth)
+
 
         return self.create_pcd_from_image_and_depth(cam, rgb, depth, init)
 
     def create_pcd_from_image_and_depth(self, cam, rgb, depth, init=False):
+        # Visualize rgb and depth 
+
         if init:
             downsample_factor = self.config["Dataset"]["pcd_downsample_init"]
         else:
-            downsample_factor = self.config["Dataset"]["pcd_downsample"]
-        point_size = self.config["Dataset"]["point_size"]
-        if "adaptive_pointsize" in self.config["Dataset"]:
-            if self.config["Dataset"]["adaptive_pointsize"]:
+            downsample_factor = self.config.dataset_settings["pcd_downsample"]
+        point_size = self.config.dataset_settings["point_size"]
+        # point_size = self.config["Dataset"]["point_size"] # OLD LINES
+
+        if "adaptive_pointsize" in self.config.dataset_settings:
+            if self.config.dataset_settings["adaptive_pointsize"]:
                 point_size = min(0.05, point_size * np.median(depth))
         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
             rgb,
@@ -179,6 +196,15 @@ class GaussianModel:
         )
         features[:, :3, 0] = fused_color
         features[:, 3:, 1:] = 0.0
+        print(type(pcd.points))
+        print("shape of pcd.points: ", pcd.points.shape)
+        print(type(np.asarray(pcd.points)))
+        print("shape of np.asarray(pcd.points): ", np.asarray(pcd.points).shape)
+        print(type(torch.from_numpy(np.asarray(pcd.points))))
+        print("shape of torch.from_numpy(np.asarray(pcd.points)): ", torch.from_numpy(np.asarray(pcd.points)).shape)
+        print(type(torch.from_numpy(np.asarray(pcd.points)).float()))
+        print("shape of torch.from_numpy(np.asarray(pcd.points)).float(): ", torch.from_numpy(np.asarray(pcd.points)).float().shape)
+
 
         dist2 = (
             torch.clamp_min(
@@ -279,6 +305,7 @@ class GaussianModel:
                 "name": "rotation",
             },
         ]
+        print('l: ', l)
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(
@@ -522,6 +549,7 @@ class GaussianModel:
 
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
+        print('self.optimizer: ', self.optimizer)
         for group in self.optimizer.param_groups:
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]

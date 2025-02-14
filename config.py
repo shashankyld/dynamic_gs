@@ -105,6 +105,8 @@ class Config(object):
         self.sensor_type = self.dataset_settings['sensor_type'].lower()
         self.dataset_path = self.dataset_settings['base_path']
         self.dataset_settings['base_path'] = os.path.join( __location__, self.dataset_path)
+        self.gs_opt_params = self.dataset_settings['gs_opt_params']
+        self.pipeline_params = self.dataset_settings['pipeline_params']
         #print('dataset_settings: ', self.dataset_settings)
 
     # get camera settings
