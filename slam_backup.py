@@ -16,7 +16,6 @@ from utilities.utils_misc import estimate_pose_ransac, estimate_pose_icp
 import open3d as o3d
 from utilities.utils_misc import *
 import matplotlib.pyplot as plt
-import networkx as nx
 
 def create_histogram_image(data, num_bins=50, value_range=(-20, 20), width=640, height=480):
     """Create a histogram visualization using OpenCV"""
@@ -432,7 +431,7 @@ if __name__ == "__main__":
 
             
             # Remove the edges which are changing lengths significantly with a threshold
-            dynamic_threshold = 4
+            dynamic_threshold = 3
             dynamic_edges = []
             for i in range(len(lengths_prev)):
                 if abs(lengths_prev[i] - lengths_curr[i]) > dynamic_threshold:
@@ -456,17 +455,15 @@ if __name__ == "__main__":
                             
                     return img
                 # common edges in green and if they are dynamic, in red
-                for i in range(len(common_pairs)):
-                    a,b = common_pairs[i]
-                    if i in dynamic_edges:
-                        cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,0,255), 2)
-                    else:
-                        cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,255,0), 2)
-                return img
+                else: 
+                    for i in range(len(common_pairs)):
+                        a,b = common_pairs[i]
+                        if i in dynamic_edges:
+                            cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,0,255), 2)
+                        else:
+                            cv2.line(img, (int(kpts[a][0]), int(kpts[a][1])), (int(kpts[b][0]), int(kpts[b][1])), (0,255,0), 2)
+                    return img
             
-
-
-        
 
             img = dataset.getImage(img_id)
             img = torch.from_numpy(img).permute(2, 0, 1).float()/ 255.0
@@ -478,125 +475,14 @@ if __name__ == "__main__":
             cv2.imshow("Curr_img_with_dynamic_edges2", curr_img_with_dynamic_edges2)
             cv2.waitKey(2)
 
-            common_pais_after_removing_dynamic_edges = [pair for i, pair in enumerate(common_pairs) if i not in dynamic_edges]
-            common_pairs = common_pais_after_removing_dynamic_edges ### MAJOR ADAPTATION IN NAMING, CAN BE CONFUSING
 
-            ## Now, we will divide the whole graph into connected components using graph traversal and find the largest connected component,
-            ## Added thing we can do is - if more connected components emerge, we can see consensus between these sub graphs
-            ## Estimate distance between randomly picked point in two different connected components and see if they are changing - if they are not changing, we can say that they are together.
-            ## At the end, the biggest connected component along with its consensus subgraphs are considered static 
-            ## The rest are dynamic
+
+            
+
+
                 
 
-            ##TODO: Implement the above logic
-            # Create a graph with the common pairs
-            graph_adj_mat = {}
-            for pair in common_pairs:
-                a,b = pair
-                if a not in graph_adj_mat:
-                    graph_adj_mat[a] = []
-                if b not in graph_adj_mat:
-                    graph_adj_mat[b] = []
-                graph_adj_mat[a].append(b)
-                graph_adj_mat[b].append(a)
-            print("Graph adjacency matrix: ", graph_adj_mat)
 
-            # Use DFS to find connected components
-            visited = {}
-            for key in graph_adj_mat.keys():
-                visited[key] = False
-
-            def dfs(node, visited, graph_adj_mat, connected_component):
-                visited[node] = True
-                connected_component.append(node)
-                for neighbour in graph_adj_mat[node]:
-                    if not visited[neighbour]:
-                        dfs(neighbour, visited, graph_adj_mat, connected_component)
-                return connected_component
-            
-
-            connected_components = []
-            for key in graph_adj_mat.keys():
-                if not visited[key]:
-                    connected_component = []
-                    connected_components.append(dfs(key, visited, graph_adj_mat, connected_component))
-            print("Connected components: ", connected_components)
-
-            # Visualize connected components
-            connected_components_img = dataset.getImage(img_id)
-            connected_components_img = torch.from_numpy(connected_components_img).permute(2, 0, 1).float()/ 255.0
-            connected_components_img_np = connected_components_img.permute(1, 2, 0).cpu().numpy()
-
-            def visualize_connected_components(img, kpts, connected_components):
-                img = img.copy()
-                # Rank based on the number of keypoints in the connected components
-                connected_components = sorted(connected_components, key=lambda x: len(x), reverse=True)
-                # Draw convex hulls around the connected components 
-
-
-
-                for component in connected_components:
-                    colors = [(0,255,0), (0,0,255), (255,0,0), (0,255,255), (255,0,255), (255,255,0), (255,255,255), (0,0,0), (200,200,200), (100,100,100), (150,150,150), (50,50,50)] + [(np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)) for i in range(100)]
-                    for idx in component:
-                        if idx >= len(colors):
-                            colors.append((np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)))
-                        cv2.circle(img, (int(kpts[idx][0]), int(kpts[idx][1])), 3, colors[connected_components.index(component)], -1)
-
-                    convex_hull = cv2.convexHull(np.array([kpts[idx] for idx in component]).astype(np.int32))
-
-                    cv2.polylines(img, [convex_hull], True, colors[connected_components.index(component)], 2)
-
-
-
-                return img
-            
-            connected_components_img_with_circles = visualize_connected_components(connected_components_img_np, kpts1_np, connected_components)
-            cv2.imshow("Connected components", connected_components_img_with_circles)
-            cv2.waitKey(2)
-
-            # Only show the N components which has the highest average difference in lengths and have less than 10% of the keypoints
-            # Find average difference in lengths for each connected component
-            avg_diffs = []
-            for component in connected_components:
-                diffs = []
-                for i in range(len(component)):
-                    a,b = common_pairs[i]
-                    diffs.append(np.linalg.norm(kpts1_np[a] - kpts1_np[b]))
-                avg_diffs.append(np.mean(diffs))
-
-            # Sort the connected components based on the average difference in lengths
-            connected_components = [x for _, x in sorted(zip(avg_diffs, connected_components), reverse=True)]
-
-            # Only show the N components which has the highest average difference in lengths and have less than 10% of the keypoints
-            N = 3
-            threshold = 0.1
-            selected_components = []
-            for component in connected_components:
-                if len(component) < threshold * len(kpts1_np) and len(component) > 2: ## 3 because any reasonable dynamic object will have more than 3 keypoints
-                    selected_components.append(component)
-                if len(selected_components) == N:
-                    break
-
-            # Visualize selected components
-            selected_components_img = dataset.getImage(img_id)
-            
-            selected_components_img = torch.from_numpy(selected_components_img).permute(2, 0, 1).float()/ 255.0
-
-            selected_components_img_np = selected_components_img.permute(1, 2, 0).cpu().numpy()
-            selected_components_img_with_circles = visualize_connected_components(selected_components_img_np, kpts1_np, selected_components)
-            cv2.imshow("Selected components", selected_components_img_with_circles)
-            cv2.waitKey(2)
-
-
-
-            
-
-
-
-
-
-                        
-            
 
             
             '''
