@@ -9,7 +9,7 @@ from thirdparty.LightGlue.lightglue import LightGlue, SuperPoint, DISK
 from thirdparty.LightGlue.lightglue import viz2d
 from thirdparty.LightGlue.lightglue.utils import rbd
 import torch
-from config_parameters import Parameters  
+from slam_parameters import SlamParameters
 import numpy as np
 from utilities.utils_draw import draw_torch_image, visualize_matches
 from utilities.utils_misc import estimate_pose_ransac, estimate_pose_icp

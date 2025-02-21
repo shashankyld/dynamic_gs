@@ -23,8 +23,8 @@ import csv
 import json
 import numpy as np 
 from enum import Enum
-from utils_sys import Printer 
-from utils_geom import rotmat2qvec, xyzq2Tmat
+from utilities.utils_sys import Printer 
+from utilities.utils_geom import rotmat2qvec, xyzq2Tmat
 
 class GroundTruthType(Enum):
     NONE = 1

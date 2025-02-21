@@ -1,56 +1,4 @@
 
-CORE_LIB_PATHS:
-  # Core libs are automatically imported by using: 
-  # import config 
-  g2o: thirdparty/g2opy/lib
-  pangolin: thirdparty/pangolin
-  orb_features: thirdparty/orbslam2_features/lib
-  pyslam_utils: cpp/utils/lib
-  thirdparty: thirdparty  # considering the folders in thirdparty as modules
-  utilities: utilities
-  depth_estimation: depth_estimation 
-  local_features: local_features
-  loop_closing: loop_closing
-  slam: slam
-  viz: viz
-  io: io
-  dense: dense
-
-LIB_PATHS:
-  # The following libs are explicitely imported on demand by using, for instance:
-  # import config \ config.cfg.set_lib('tfeat')
-  lightglue: thirdparty/LightGlue
-  xfeat: thirdparty/accelerated_features
-  superpoint: thirdparty/superpoint
-  hardnet: thirdparty/hardnet
-  tfeat: thirdparty/tfeat
-  geodesc: thirdparty/geodesc
-  sosnet: thirdparty/SOSNet/codes 
-  l2net: thirdparty/l2net
-  l2net_keras: thirdparty/l2net_keras/src 
-  logpolar: thirdparty/logpolar
-  d2net: thirdparty/d2net 
-  delf: thirdparty/tensorflow_models/research/delf,thirdparty/tensorflow_models/research/slim,thirdparty/tensorflow_models/research/
-  contextdesc: thirdparty/contextdesc
-  lfnet: thirdparty/lfnet
-  r2d2: thirdparty/r2d2
-  keynet: thirdparty/keynet
-  disk: thirdparty/disk
-  torch-dimcheck: thirdparty/disk/submodules/torch-dimcheck
-  torch-localize: thirdparty/disk/submodules/torch-localize
-  unets: thirdparty/disk/submodules/unets
-  pydbow3: thirdparty/pydbow3/lib
-  pydbow2: thirdparty/pydbow2/lib
-  pyibow: thirdparty/pyibow/lib
-  pyobindex2: thirdparty/pyibow/lib
-  vpr: thirdparty/vpr, thirdparty/patch_netvlad
-  depth_pro: thirdparty/ml_depth_pro/src
-  depth_anything_v2: thirdparty/depth_anything_v2/metric_depth
-  raft_stereo: thirdparty/raft_stereo, thirdparty/raft_stereo/core
-  crestereo: thirdparty/crestereo
-  crestereo_pytorch: thirdparty/crestereo_pytorch 
-  #crestereo_onnx: thirdparty/crestereo_onnx
-
 
 DATASET:
   # select your dataset (decomment only one of the following lines) 
@@ -73,7 +21,7 @@ KITTI_DATASET:
   # settings: settings/KITTI04-12.yaml # do not forget to correctly set the corresponding camera settings file 
   #
   name: '00'
-  settings: settings/KITTI00-02.yaml # do not forget to correctly set the corresponding camera settings file 
+  settings: dataset/KITTI00-02.yaml # do not forget to correctly set the corresponding camera settings file 
   #
   is_color: True # do you have the color images for the kitti dataset? (image2 and image3 folders)
   groundtruth_file: auto
@@ -86,13 +34,13 @@ TUM_DATASET:
   base_path: /home/shashank/Documents/UniBonn/Sem4/ThesisPrep/pyslam/data/TUM # DATA FROM LEGION
   #
   #name: rgbd_dataset_freiburg3_long_office_household
-  #settings: settings/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
+  #settings: dataset/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
   #
   #name: rgbd_dataset_freiburg1_xyz 
-  #settings: settings/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
+  #settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
   #
   name: rgbd_dataset_freiburg3_walking_xyz  # do not use this for mono, there are some in-place rotations during exploratory phases
-  settings: settings/TUM1.yaml # do not forget to set the corresponding camera settings file 
+  settings: dataset/TUM1.yaml # do not forget to set the corresponding camera settings file 
   #
   associations: associations.txt
   groundtruth_file: auto
@@ -134,15 +82,15 @@ BONN_DATASET:
 
   #
   #name: rgbd_dataset_freiburg3_long_office_household
-  #settings: settings/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
+  #settings: dataset/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
   #
   #name: rgbd_dataset_freiburg1_xyz 
-  #settings: settings/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
+  #settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
   #
   # name: rgbd_bonn_static_close_far # do not use this for mono, there are some in-place rotations during exploratory phases # DATA FROM LEGION
   name: rgbd_bonn_crowd ## DATA FROM LAB
-  settings: settings/rgbd_bonn.yaml # do not forget to set the corresponding camera settings file 
-  #
+  settings: dataset/rgbd_bonn.yaml # do not forget to set the corresponding camera settings file 
+  #Parameters  
   associations: associations.txt
   groundtruth_file: auto
 
@@ -177,71 +125,26 @@ BONN_DATASET:
     compute_cov3D_python: False
 
 
-EUROC_DATASET:
-  type: euroc
-  sensor_type: stereo # Here, sensor_type can be 'mono' or 'stereo'
-  base_path: /home/luigi/Work/datasets/rgbd_datasets/euroc
-  #name: MH01
-  #name: MH02  
-  #name: MH03    
-  #name: V101  
-  name: V102
-  #name: V202
-  #name: V203   
-  # 'settings' will be used when sensor_type: : 'mono'
-  settings: settings/EuRoC_mono.yaml
-  # 'settings_stereo' will be used when sensor_type: 'stereo' (if available)
-  settings_stereo: settings/EuRoC_stereo.yaml
-  associations: associations.txt
-  groundtruth_file: auto
-  start_frame_id: 0
-
-
-REPLICA_DATASET:
-  type: replica
-  sensor_type: rgbd # Here, 'sensor_type' can be 'mono' or 'rgbd'
-  base_path: /home/luigi/Work/datasets/rgbd_datasets/replica
-  name: 'room2'
-  settings: settings/REPLICA.yaml # do not forget to correctly set the corresponding camera settings file
-  groundtruth_file: auto
-
-
 VIDEO_DATASET:
   type: video
   sensor_type: mono   # Here, 'sensor_type' can be only 'mono' 
   #
   #base_path: ./data/videos/kitti00
-  #settings: settings/KITTI00-02.yaml
+  #settings: dataset/KITTI00-02.yaml
   #name: video.mp4
   #
   base_path: ./data/videos/kitti06
-  settings: settings/KITTI04-12.yaml
+  settings: dataset/KITTI04-12.yaml
   name: video_color.mp4
   #
   #base_path: ./data/videos/webcam
-  #settings: settings/WEBCAM.yaml 
+  #settings: dataset/WEBCAM.yaml 
   #name: video.mp4
   #
   groundtruth_file: groundtruth.txt
   timestamps: times.txt # to be intended as the frame timestamps
 
 
-FOLDER_DATASET:
-  type: folder 
-  sensor_type: mono   # Here, 'sensor_type' can be only 'mono' 
-  base_path: /home/luigi/Work/rgbd_datasets2/kitti/dataset/sequences/00/image_0/
-  # 'name' is used for specifying a glob pattern, e.g. *png, *jpeg, etc...
-  name: '*png'  
-  settings: settings/KITTI00-02.yaml
-  groundtruth_file: groundtruth.txt
-  fps: 20 
-
-
-SYSTEM_STATE: 
-  # This section is used for saving and re-loading the system state: Map + Loop closing state  
-  load_state: False              # flag to enable SLAM state reloading (map state + loop closing state) and relocalization
-  folder_path: data/slam_state   # folder path relative to root of this repository
- 
 
 SAVE_TRAJECTORY:
   save_trajectory: True
@@ -249,14 +152,3 @@ SAVE_TRAJECTORY:
   filename: kitti_trajectory.txt
 
 
-# DO NOT USE [LIVE_DATASET]! This section is here for future developments. 
-# At the present time (see the README file):
-# - main_vo.py cannot be used with your webcam since it requires a grountruth for recovering a correct inter-frame scale (see the README file) 
-# - main_slam.py does NOT have REAL-TIME processing capabilities yet (even if it does NOT need grountruth data)
-# If you want to use your webcam, please, record a video by using calibration/save_video.py and then use it as a VIDEO_DATASET.
-LIVE_DATASET: 
-  type: live 
-  base_path: 
-  name: /dev/video2
-  settings: settings/WEBCAM.yaml 
-  groundtruth_file: auto

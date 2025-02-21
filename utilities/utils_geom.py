@@ -98,7 +98,7 @@ import os
 import numpy as np
 import cv2
 import math
-from utils_sys import Printer
+from utilities.utils_sys import Printer
 
 
 sign = lambda x: math.copysign(1, x)

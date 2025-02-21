@@ -61,43 +61,15 @@ class Config(object):
         
         #locally_configure_qt_environment()
 
-        self.set_core_lib_paths()
-        self.read_lib_paths()
+        # self.set_core_lib_paths()
+        # self.read_lib_paths()
         
         self.get_dataset_settings()
         self.get_cam_settings()
         self.get_feature_manager_settings()
-        self.get_system_state_settings()
         self.get_trajectory_settings()
 
 
-    # read core lib paths from config.yaml and set sys paths
-    def set_core_lib_paths(self):
-        self.core_lib_paths = self.config['CORE_LIB_PATHS']
-        for path in self.core_lib_paths:
-            ext_path = __location__ + '/' + self.core_lib_paths[path]
-            #print( "importing path: ", ext_path )
-            sys.path.append(ext_path)
-            
-    # read lib paths from config.yaml 
-    def read_lib_paths(self):
-        self.lib_paths = self.config['LIB_PATHS']
-        
-    # set sys path of lib 
-    def set_lib(self,lib_name,prepend=False):
-        if lib_name in self.lib_paths:
-            lib_paths = [e.strip() for e in self.lib_paths[lib_name].split(',')]
-            #print('setting lib paths:',lib_paths)
-            for lib_path in lib_paths:
-                ext_path = __location__ + '/' + lib_path
-                #print( "importing path: ", ext_path )
-                if not prepend: 
-                    sys.path.append(ext_path)      
-                else: 
-                    sys.path.insert(0,ext_path)
-        else: 
-            print('cannot set lib: ', lib_name)
-            
     # get dataset settings
     def get_dataset_settings(self):
         self.dataset_type = self.config['DATASET']['type']
@@ -107,7 +79,6 @@ class Config(object):
         self.dataset_settings['base_path'] = os.path.join( __location__, self.dataset_path)
         self.gs_opt_params = self.dataset_settings['gs_opt_params']
         self.pipeline_params = self.dataset_settings['pipeline_params']
-        #print('dataset_settings: ', self.dataset_settings)
 
     # get camera settings
     def get_cam_settings(self):
@@ -136,15 +107,6 @@ class Config(object):
                 except yaml.YAMLError as exc:
                     print(exc)                    
 
-    def get_system_state_settings(self):
-        self.system_state_settings = self.config['SYSTEM_STATE']
-        self.system_state_load = self.system_state_settings['load_state']
-        self.system_state_folder_path = __location__ + '/' + self.system_state_settings['folder_path']
-        folder_path_exists = os.path.exists(self.system_state_folder_path)
-        folder_path_is_not_empty = os.path.getsize(self.system_state_folder_path) > 0 if folder_path_exists else False
-        if self.system_state_load and not(folder_path_exists and folder_path_is_not_empty):
-            Printer.red('System state folder does not exist or is empty: ' + self.system_state_folder_path)
-            self.system_state_load = False
 
     # get trajectory save settings
     def get_trajectory_settings(self):

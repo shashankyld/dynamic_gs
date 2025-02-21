@@ -20,7 +20,7 @@
 import os
 import numpy as np
 import cv2
-
+import torch
 import random
 import string
 from utils_delaunay import draw_simplicies_on_image
@@ -193,6 +193,84 @@ def draw_random_rects(img,N=100):
         thickness = max(np.random.randint(-3, 10),-1)        
         cv2.rectangle(img, (pt1x,pt1y), (pt2x,pt2y), color, thickness, lineType)
 
+
+def draw_torch_image(img):
+    img = img.squeeze().detach().cpu().numpy()
+    img = np.transpose(img, (1, 2, 0))
+    img = np.clip(img, 0, 1) * 255
+    img = img.astype(np.uint8)
+    cv2.imshow("Image", img)
+    cv2.waitKey(20)
+
+
+def visualize_matches(img0, img1, kpts0, kpts1, matches, color=(0, 255, 0), thickness=2, radius=3,  add_text = False):
+    """
+    Visualizes keypoint matches between two images.
+
+    Args:
+        img0: The first image (numpy array, HxWxC or HxW).
+        img1: The second image (numpy array, HxWxC or HxW).
+        kpts0: Keypoints in the first image (torch.Tensor or numpy array, Nx2).
+        kpts1: Keypoints in the second image (torch.Tensor or numpy array, Nx2).
+        matches: A tensor/array of shape (M, 2) where each row contains indices (i, j) 
+                 indicating that kpts0[i] matches kpts1[j].
+        color:  Color of the lines and circles (B, G, R). Default: Green.
+        thickness: Thickness of the connecting lines.
+        radius: Radius of the keypoint circles.
+        add_text : to add the text or not.
+
+    Returns:
+        output_img:  A combined image with matches visualized.
+    """
+
+    # Ensure images are numpy arrays
+    if isinstance(img0, torch.Tensor):
+        img0 = img0.permute(1, 2, 0).cpu().numpy()
+    if isinstance(img1, torch.Tensor):
+        img1 = img1.permute(1, 2, 0).cpu().numpy()
+    
+    # Convert grayscale to color if necessary
+    if len(img0.shape) == 2:
+        img0 = cv2.cvtColor(img0, cv2.COLOR_GRAY2BGR)
+    if len(img1.shape) == 2:
+        img1 = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
+
+    img0 = np.clip(img0 * 255, 0, 255).astype(np.uint8)
+    img1 = np.clip(img1 * 255, 0, 255).astype(np.uint8)
+    
+
+    h0, w0 = img0.shape[:2]
+    h1, w1 = img1.shape[:2]
+
+    # Stack images horizontally
+    output_img = np.hstack([img0, img1])
+
+    # Convert keypoints to numpy arrays and to integer pixel coordinates
+    if isinstance(kpts0, torch.Tensor):
+        kpts0 = kpts0.cpu().numpy()
+    if isinstance(kpts1, torch.Tensor):
+        kpts1 = kpts1.cpu().numpy()
+    if isinstance(matches, torch.Tensor):
+        matches = matches.cpu().numpy()
+
+    kpts0 = kpts0.astype(int)
+    kpts1 = kpts1.astype(int)
+    
+    # Draw matches
+    for i, j in matches:
+        pt0 = tuple(kpts0[i])  # First image coordinates
+        pt1 = tuple(kpts1[j] + np.array([w0, 0]))  # Second image, offset by width of first image
+
+        cv2.circle(output_img, pt0, radius, color, thickness)
+        cv2.circle(output_img, pt1, radius, color, thickness)
+        cv2.line(output_img, pt0, pt1, color, thickness)
+
+        if add_text:
+            # Add text to the key points, more parameters can be added to make them look better.
+            cv2.putText(output_img, str(i), pt0, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt0
+            cv2.putText(output_img, str(j), pt1, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt
+
+    return output_img
 
 def draw_random_ellipses(img, N=100):
     lineType = 8

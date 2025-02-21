@@ -2,3 +2,4 @@ Metadata-Version: 2.1
 Name: splat-slam
 Version: 0.1
 Requires-Dist: plyfile
+Requires-Dist: munch

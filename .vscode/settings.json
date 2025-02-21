@@ -1,0 +1,10 @@
+{
+    "files.exclude": {
+        "**/__pycache__/": true,
+        "**/build/": true,
+        "**/dist/": true,
+        "**/*.pyc": true,
+        "**/*.pyo": true,
+        "**/*.egg-info/": true
+    }
+}

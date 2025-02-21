@@ -2,7 +2,123 @@
 import numpy as np
 import cv2
 from scipy.spatial import Delaunay
+from utilities.utils_depth import depth2pointcloud
+import open3d as o3d
 
+
+def estimate_pose_icp(ref_pc, cur_pc, threshold = 0.1, init_T = np.eye(4)):
+    """
+    Estimates the camera pose using ICP.
+
+    Args:
+        ref_pc: Reference point cloud (Nx3 numpy array).
+        cur_pc: Current point cloud (Mx3 numpy array).
+        threshold: Distance threshold for ICP.
+        init_T: Initial transformation (4x4 numpy array).
+
+    Returns:
+        success: Boolean indicating success.
+        T: Transformation matrix (4x4).
+    """
+
+    # Create Open3D point cloud objects
+    ref_pcd = o3d.geometry.PointCloud()
+    ref_pcd.points = o3d.utility.Vector3dVector(ref_pc)
+
+    cur_pcd = o3d.geometry.PointCloud()
+    cur_pcd.points = o3d.utility.Vector3dVector(cur_pc)
+
+    # Create Open3D ICP object
+    icp = o3d.pipelines.registration.registration_icp(
+        ref_pcd, cur_pcd, threshold, init_T,
+        o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=200)
+    )
+
+    # Get the transformation matrix
+    T = icp.transformation
+
+    return T
+
+def estimate_pose_ransac(ref_depth, ref_img, kpts0, kpts1, matches, camera_matrix, dist_coeffs=None):
+    """
+    Estimates the camera pose using RANSAC and PnP.
+
+    Args:
+        ref_depth: Depth image of the reference frame (HxW numpy array).
+        ref_img:  RGB image of ref frame.
+        kpts0: Keypoints in the reference frame (Nx2 numpy array).
+        kpts1: Keypoints in the current frame (Mx2 numpy array).
+        matches: Matches (Kx2 numpy array of indices).
+        camera_matrix: Camera intrinsics (3x3 numpy array).
+        dist_coeffs: Distortion coefficients (optional).
+
+    Returns:
+        success: Boolean indicating success.
+        R: Rotation matrix (3x3).
+        t: Translation vector (3x1).
+        inliers: Indices of inlier matches.
+    """
+
+    print("Matches", matches)
+
+    # 1.  3D point generation (from reference frame)
+    fx = camera_matrix[0, 0]
+    fy = camera_matrix[1, 1]
+    cx = camera_matrix[0, 2]
+    cy = camera_matrix[1, 2]
+    points3d = depth2pointcloud(ref_depth, ref_img, fx, fy, cx, cy, max_depth=100000.0, min_depth=0.0).points  # (HxWx
+    print("points3d", points3d)
+    # # Visually check the points3d
+    # o3d_points = o3d.geometry.PointCloud()
+    # o3d_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2, origin=[0, 0, 0])
+    # o3d_points.points = o3d.utility.Vector3dVector(points3d)
+
+    # o3d.visualization.draw_geometries([o3d_points, o3d_axis])
+
+
+    print("points3d", points3d.shape)
+    print("Type of points3d", type(points3d))
+    # 2. Create 3D-2D correspondences
+    points3d_matched = points3d[matches[:, 0]]  # 3D points (reference frame)
+    points2d_matched = kpts1[matches[:, 1]]  # 2D points (current frame)
+
+    # Remove invalid depth points
+    # Check for valid z (depth) >0 and <100
+    valid_mask = points3d_matched[:, 2] > 0.0 # Depth > 0
+    valid_mask = np.logical_and(valid_mask, points3d_matched[:, 2] < 100.0)  # Depth < 100
+    points3d_matched = points3d_matched[valid_mask]
+    # Visualize the points3d_matched
+    o3d_points_matched = o3d.geometry.PointCloud()
+    o3d_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2, origin=[0, 0, 0])
+    o3d_points_matched.points = o3d.utility.Vector3dVector(points3d_matched)
+    o3d.visualization.draw_geometries([o3d_points_matched, o3d_axis])
+
+    points2d_matched = points2d_matched[valid_mask]
+
+    # 3. RANSAC + PnP
+    if len(points3d_matched) >= 4:  # Need at least 4 points for PnP
+        # success, rvec, tvec, inliers = cv2.solvePnPRansac(
+        #     points3d_matched,
+        #     points2d_matched,
+        #     camera_matrix,
+        #     dist_coeffs,
+        #     iterationsCount=100, # RANSAC iterations
+        #     reprojectionError=13.0,  # Reprojection error threshold
+        #     confidence=0.99, # Confidence level
+        #     flags=cv2.SOLVEPNP_ITERATIVE  # Solver method
+        # )
+
+        success, rvec, tvec, inliers = cv2.solvePnPRansac(points3d_matched, points2d_matched, camera_matrix, dist_coeffs,iterationsCount=100, reprojectionError=8.0, confidence=0.99, flags=cv2.SOLVEPNP_EPNP)  # Use EPnP instead of iterative PnP)
+
+        if success:
+            R, _ = cv2.Rodrigues(rvec)  # Rotation vector to matrix
+            t = tvec.reshape(3, 1)
+            return success, R, t, inliers
+        else:
+            return False, None, None, None
+    else:
+       return False, None, None, None
 
 def remove_duplicates_from_index_arrays(idxs_ref, idxs_cur):
     """
@@ -44,6 +160,65 @@ def remove_duplicates_from_index_arrays(idxs_ref, idxs_cur):
 
     return idxs_ref_updated, idxs_cur_updated
 
+
+def delaunay_with_kps_new(img, kps, idxs, all_kps=False):
+    original_kps = kps.copy()
+    print("length of kps passed to delaunay_with_kps_new", len(kps))
+    if len(idxs) == 0:
+        print("Warning: No keypoints available for Delaunay triangulation.")
+        return None
+
+    if not all_kps:
+        kps = kps[idxs]
+    print("length of kps after idxs masked passed to delaunay_with_kps_new", len(kps))
+
+    if len(kps) < 3:  # Delaunay needs at least 3 points
+        print("Warning: Not enough points for triangulation.")
+        return None
+
+    # Convert to int if necessary - NOT NEEDED
+    
+
+    # Perform Delaunay triangulation
+    tri = Delaunay(kps) # Floating point coordinates
+    tri_simplicies = tri.simplices  
+    # These are ranging from 0-N but the idxs are the original indices of the keypoints 
+    # So, create a fake a tri_simplicies but with the original indices of the keypoints
+    fake_tri_simplicies = np.zeros_like(tri_simplicies)
+    for i in range(len(kps)):
+        # Find idx where kps[i] is present in original_kps
+        a, b, c = tri_simplicies[i]
+        idx_original_a = np.where((original_kps == kps[a]).all(axis=1))[0][0]
+        idx_original_b = np.where((original_kps == kps[b]).all(axis=1))[0][0]
+        idx_original_c = np.where((original_kps == kps[c]).all(axis=1))[0][0]
+        fake_tri_simplicies[i] = [idx_original_a, idx_original_b, idx_original_c]
+
+
+    """ 
+    indices of the points in kps that form the triangles
+    array([[2, 3, 0],                 
+       [3, 1, 0]], dtype=int32)
+    """
+    tri_vertices = kps[tri_simplicies]
+    """ 
+    Actual vertices of the triangles in the image in pixel coordinates - floating point
+    array([[[ 1. ,  0. ],          
+        [ 1. ,  1. ],
+        [ 0. ,  0. ]],
+       [[ 1. ,  1. ],
+        [ 0. ,  1.1],
+        [ 0. ,  0. ]]])
+    """
+
+    # Draw triangles
+    for tri_vert in tri_vertices:
+        tri_vert = np.array(tri_vert, dtype=np.int32)
+        cv2.polylines(img, [tri_vert], isClosed=True, color=(0, 255, 0), thickness=1)
+
+    tri_simplicies = fake_tri_simplicies
+
+    print("Delaunay triangulation completed.")
+    return tri_simplicies, tri_vertices, img
 
 def delaunay_with_kps(frame, idxs, all_kps=False):
     kps = frame.kps
