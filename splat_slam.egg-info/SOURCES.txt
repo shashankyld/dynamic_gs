@@ -42,6 +42,7 @@ thirdparty/gaussian_splatting/utils/slam_utils.py
 thirdparty/gaussian_splatting/utils/system_utils.py
 utilities/__init__.py
 utilities/utils_delaunay.py
+utilities/utils_depth.py
 utilities/utils_draw.py
 utilities/utils_geom.py
 utilities/utils_img.py

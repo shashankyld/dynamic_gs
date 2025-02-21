@@ -27,6 +27,7 @@ import yaml
 import numpy as np
 from utilities.utils_sys import Printer, locally_configure_qt_environment
 import math
+import slam_parameters 
 
 
 # N.B.: this file must stay in the root folder of the repository 
@@ -53,21 +54,15 @@ class Config(object):
         self.dataset_settings = None
         self.dataset_type = None
         self.sensor_type = None
-        self.system_state_settings = None
-        self.system_state_folder_path = None
-        self.system_state_load = False
-        self.trajectory_settings = None
-        self.start_frame_id = 0  
-        
-        #locally_configure_qt_environment()
-
-        # self.set_core_lib_paths()
-        # self.read_lib_paths()
-        
+        self.start_frame_id = slam_parameters.SlamParameters.kStartingFrameIdx
+        self.end_frame_id = slam_parameters.SlamParameters.kEndingFrameIdx
+        self.NumFramesAway = slam_parameters.SlamParameters.kNumFramesAway
+        self.num_features_to_extract = slam_parameters.SlamParameters.kNumFeatures
+        self.ShowDebugImages = slam_parameters.SlamParameters.kShowDebugImages
         self.get_dataset_settings()
         self.get_cam_settings()
         self.get_feature_manager_settings()
-        self.get_trajectory_settings()
+
 
 
     # get dataset settings
@@ -83,6 +78,8 @@ class Config(object):
     # get camera settings
     def get_cam_settings(self):
         self.cam_settings = None
+
+
         self.cam_settings_filepath = __location__ + '/' + self.config[self.dataset_type]['settings']
         if self.sensor_type == 'stereo':
             if 'settings_stereo' in self.config[self.dataset_type]:
@@ -99,6 +96,7 @@ class Config(object):
     # get feature manager settings
     def get_feature_manager_settings(self):
         self.feature_manager_settings = None
+
         self.feature_manager_settings_filepath = __location__ + '/' + self.config[self.dataset_type]['settings']
         if(self.feature_manager_settings_filepath is not None):
             with open(self.feature_manager_settings_filepath, 'r') as stream:
@@ -106,11 +104,6 @@ class Config(object):
                     self.feature_manager_settings = yaml.load(stream, Loader=yaml.FullLoader)
                 except yaml.YAMLError as exc:
                     print(exc)                    
-
-
-    # get trajectory save settings
-    def get_trajectory_settings(self):
-        self.trajectory_settings = self.config['SAVE_TRAJECTORY']
 
 
     # calibration matrix
@@ -204,15 +197,7 @@ class Config(object):
                 self._depth_threshold = float('inf')
         return self._depth_threshold
 
-    # num features to extract 
-    @property
-    def num_features_to_extract(self):
-        if not hasattr(self, '_num_features_to_extract'):
-            if 'FeatureExtractor.nFeatures' in self.feature_manager_settings:
-                self._num_features_to_extract = self.feature_manager_settings['FeatureExtractor.nFeatures']
-            else:
-                self._num_features_to_extract = 0
-        return self._num_features_to_extract    
+
 
     # stereo settings 
     @property

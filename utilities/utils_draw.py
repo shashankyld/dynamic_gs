@@ -23,7 +23,7 @@ import cv2
 import torch
 import random
 import string
-from utils_delaunay import draw_simplicies_on_image
+from utilities.utils_delaunay import draw_simplicies_on_image
 
 
 # draw a list of points with different random colors on a input image 
@@ -513,3 +513,50 @@ def visualize_matched_edges(prev_frame, cur_frame, idxs_ref, idxs_cur, common_ed
     # Display the enlarged image
     cv2.imshow("Matched Edges Between Frames", stacked_image)
     cv2.waitKey(2)
+
+
+
+def create_histogram_image(data, num_bins=50, value_range=(-20, 20), width=640, height=480):
+    """Create a histogram visualization using OpenCV"""
+    # Calculate histogram
+    hist_counts, bin_edges = np.histogram(data, bins=num_bins, range=value_range)
+    
+    # Normalize histogram to fit in image
+    hist_counts = hist_counts / hist_counts.max() * (height - 60)  # Leave margin for labels
+    
+    # Create image
+    img = np.ones((height, width, 3), dtype=np.uint8) * 255
+    
+    # Draw histogram bars
+    bin_width = int(width / num_bins)
+    for i in range(num_bins):
+        x1 = i * bin_width
+        y1 = height - int(hist_counts[i]) - 30  # Leave space for x-axis labels
+        x2 = (i + 1) * bin_width - 1
+        y2 = height - 30
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), -1)
+        
+        # Draw vertical grid lines
+        cv2.line(img, (x1, 0), (x1, height-30), (200, 200, 200), 1)
+    
+    # Draw horizontal grid lines (5 lines)
+    for i in range(5):
+        y = int(i * (height-30) / 4)
+        cv2.line(img, (0, y), (width, y), (200, 200, 200), 1)
+    
+    # Draw axes
+    cv2.line(img, (0, height-30), (width, height-30), (0,0,0), 2)  # X-axis
+    cv2.line(img, (0, 0), (0, height-30), (0,0,0), 2)  # Y-axis
+    
+    # Add x-axis labels (every 5th bin)
+    for i in range(0, num_bins, 5):
+        x_val = value_range[0] + (value_range[1] - value_range[0]) * i / num_bins
+        x_pos = i * bin_width
+        cv2.putText(img, f"{x_val:.1f}", (x_pos-20, height-10),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,0), 1)
+    
+    # Add title
+    cv2.putText(img, "Edge Length Differences", (width//3, 20), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2)
+    
+    return img

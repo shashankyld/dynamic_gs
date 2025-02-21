@@ -555,4 +555,111 @@ if __name__ == "__main__":
             cv2.waitKey(2)
 
 
+
+            
+
+
+
+
+
+                        
+            
+
+            
+            '''
+            if success:
+                print("Pose estimation successful!")
+                print("Rotation:\n", R)
+                print("Translation:\n", t)
+                # print("Inliers:", inliers)
+                # --- Accumulate pose (as shown in previous example) ---
+
+                # Example of how to visualize only inlier matches:
+                if inliers is not None:
+                  inlier_matches = matches[inliers.ravel()]
+                  matched_image_inliers = visualize_matches(ref_img, img, kpts0, kpts1, inlier_matches)
+                  cv2.imshow("Inlier Matches", matched_image_inliers)
+
+            else:
+                print("Pose estimation failed!")
+            '''
+
+
+        
+        # if img_id > starting_img_id + 5: 
+        #     # Create visualizer
+        #     vis = o3d.visualization.Visualizer()
+        #     vis.create_window()
+
+        #     # Create a single point cloud from all frames
+        #     global_map = o3d.geometry.PointCloud()
+        #     all_points = []
+        #     all_colors = []
+
+        #     # Transform and combine all point clouds
+        #     for frame_id, points in accumulated_clouds.items():
+        #         if frame_id in skipped_frames or frame_id in invalid_frames:
+        #             continue
+        #         if frame_id not in global_poses:
+        #             continue
+        #         if np.array_equal(global_poses[frame_id], np.eye(4)):  # Skip identity poses
+        #             continue
+                    
+        #         # Get points and colors
+        #         pts = points.points
+        #         colors = points.colors
+                
+        #         # Convert points to homogeneous coordinates
+        #         pts_homog = np.hstack((pts, np.ones((pts.shape[0], 1))))
+                
+        #         # Transform points using global pose
+        #         transformed_pts = (global_poses[frame_id] @ pts_homog.T).T[:, :3]
+                
+        #         all_points.append(transformed_pts)
+        #         all_colors.append(colors)
+
+        #     # Combine all points into single point cloud
+        #     if all_points:
+        #         global_map.points = o3d.utility.Vector3dVector(np.vstack(all_points))
+        #         global_map.colors = o3d.utility.Vector3dVector(np.vstack(all_colors))
+                
+        #         # Optional: Downsample to reduce density
+        #         global_map = global_map.voxel_down_sample(voxel_size=0.1)
+                
+        #         # Add point cloud to visualizer
+        #         vis.add_geometry(global_map)
+
+        #         # Add camera poses as coordinate frames
+        #         for frame_id, pose in global_poses.items():
+        #             cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+        #             cam_frame.transform(pose)
+        #             vis.add_geometry(cam_frame)
+
+        #         # Add trajectory visualization
+        #         points = []
+        #         for pose in global_poses.values():
+        #             points.append(pose[:3, 3])
+
+        #         if points:
+        #             # Create trajectory line set
+        #             trajectory = o3d.geometry.LineSet()
+        #             trajectory.points = o3d.utility.Vector3dVector(points)
+        #             trajectory.lines = o3d.utility.Vector2iVector([[i, i+1] for i in range(len(points)-1)])
+        #             trajectory.paint_uniform_color([1, 0, 0])  # Red color
+        #             vis.add_geometry(trajectory)
+
+        #         # Add world coordinate frame
+        #         world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3)
+        #         vis.add_geometry(world_frame)
+
+        #         # Set view control
+        #         vis.get_view_control().set_zoom(0.5)
+        #         vis.get_view_control().set_front([0, 0, -1])
+        #         vis.get_view_control().set_up([0, -1, 0])
+
+        #         # Run visualizer
+        #         vis.run()
+        #         vis.destroy_window()
+        #     break
+
         img_id += 1

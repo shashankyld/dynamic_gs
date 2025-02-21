@@ -9,3 +9,6 @@ class SlamParameters:
     # Dynamic SLAM
     kNumFramesAway = 5
 
+    # STARTING AND ENDING FRAME
+    kStartingFrameIdx = 0
+    kEndingFrameIdx = 100

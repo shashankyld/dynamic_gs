@@ -146,9 +146,3 @@ VIDEO_DATASET:
 
 
 
-SAVE_TRAJECTORY:
-  save_trajectory: True
-  format_type: kitti    # supported formats: `tum`, `kitti`, `euroc`
-  filename: kitti_trajectory.txt
-
-
