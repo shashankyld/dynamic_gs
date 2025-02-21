@@ -6,4 +6,4 @@ masked*/
 # Specific file patterns
 2025*.*
 multiframe*.*
-masked*.*
+masked*.*__pycache__/
