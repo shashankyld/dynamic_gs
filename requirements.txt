@@ -2,3 +2,4 @@
 -e submodules/diff-gaussian-rasterization
 plyfile
 munch
+gtsam

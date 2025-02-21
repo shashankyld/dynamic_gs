@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from thirdparty.gaussian_splatting.gaussian_renderer import render
 from thirdparty.gaussian_splatting.scene.gaussian_model import GaussianModel
-from thirdparty.gaussian_splatting.utils.dataset_bridge import get_camera_info_from_pyslam_dataloader_insteadofgs
+from utilities.dataset_bridge import get_camera_info_from_pyslam_dataloader_insteadofgs
 from config import Config
 from io_utils.dataset import dataset_factory
 from io_utils.ground_truth import groundtruth_factory

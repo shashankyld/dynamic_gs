@@ -29,6 +29,7 @@ from thirdparty.gaussian_splatting.utils.general_utils import (
 from thirdparty.gaussian_splatting.utils.graphics_utils import BasicPointCloud, getWorld2View2
 from thirdparty.gaussian_splatting.utils.sh_utils import RGB2SH
 from thirdparty.gaussian_splatting.utils.system_utils import mkdir_p
+from typing import List, Dict, Optional, Set
 
 
 class GaussianModel:
@@ -64,6 +65,10 @@ class GaussianModel:
         self.ply_input = None
 
         self.isotropic = False
+
+        # Add new keyframe tracking attributes
+        self.keyframe_associations = {}  # keyframe_id -> List[gaussian_indices]
+        self.gaussian_to_keyframe = {}  # gaussian_idx -> keyframe_id
 
     def build_covariance_from_scaling_rotation(
         self, scaling, scaling_modifier, rotation
@@ -756,3 +761,29 @@ class GaussianModel:
             viewspace_point_tensor.grad[update_filter, :2], dim=-1, keepdim=True
         )
         self.denom[update_filter] += 1
+
+    def associate_with_keyframe(self, keyframe_id: int, gaussian_indices: List[int]):
+        """Associate a set of gaussians with a keyframe"""
+        self.keyframe_associations[keyframe_id] = gaussian_indices
+        for idx in gaussian_indices:
+            self.gaussian_to_keyframe[idx] = keyframe_id
+            
+    def update_gaussians_from_pose_graph(self, pose_updates: Dict[int, np.ndarray]):
+        """Update gaussian positions based on keyframe pose updates"""
+        for kf_id, new_pose in pose_updates.items():
+            if kf_id in self.keyframe_associations:
+                gaussian_indices = self.keyframe_associations[kf_id]
+                # Transform associated gaussians using pose update
+                for idx in gaussian_indices:
+                    pos = self._xyz[idx].detach().cpu().numpy()
+                    pos_homog = np.append(pos, 1)
+                    new_pos_homog = new_pose @ pos_homog
+                    self._xyz[idx].data = torch.from_numpy(new_pos_homog[:3]).to(self._xyz.device)
+
+    def get_keyframe_gaussians(self, keyframe_id: int) -> List[int]:
+        """Get indices of gaussians associated with a keyframe"""
+        return self.keyframe_associations.get(keyframe_id, [])
+        
+    def get_gaussian_keyframe(self, gaussian_idx: int) -> Optional[int]:
+        """Get keyframe ID associated with a gaussian"""
+        return self.gaussian_to_keyframe.get(gaussian_idx, None)

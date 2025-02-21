@@ -53,6 +53,43 @@ def get_camera_info_from_pyslam_dataloader_insteadofgs(dataset, ground_truth,img
     camera_info = Camera(img_id, gt_img, gt_depth, gt_pose, projection_matrix, fx, fy, cx, cy, fovx, fovy, height, width, device=device)
     return camera_info
     
+def get_frame_from_pyslam_dataloader(dataset, ground_truth, img_id, config):
+    """Convert PYSLAM dataset frame to our Frame class without features/mask"""
+    
+    # Get basic frame data
+    image = dataset.getImage(img_id)
+    depth = dataset.getDepth(img_id) * (1.0/config.cam_settings["DepthMapFactor"])
+    
+    # Get timestamp and pose from ground truth
+    timestamp, x, y, z, qx, qy, qz, qw, _ = ground_truth.getTimestampPoseAndAbsoluteScale(img_id)
+    
+    # Convert quaternion to pose matrix
+    gt_pose = np.eye(4)
+    from pyquaternion import Quaternion
+    gt_pose[:3, :3] = Quaternion(qw, qx, qy, qz).rotation_matrix
+    gt_pose[:3, 3] = np.array([x, y, z])
+    
+    # Create camera matrix
+    camera_matrix = np.array([
+        [config.cam_settings["Camera.fx"], 0, config.cam_settings["Camera.cx"]],
+        [0, config.cam_settings["Camera.fy"], config.cam_settings["Camera.cy"]],
+        [0, 0, 1]
+    ])
+    
+    # Create basic Frame instance
+    from core.frame import Frame
+    frame = Frame(
+        frame_id=img_id,
+        timestamp=timestamp,
+        image=image,
+        depth=depth,
+        dynamic_mask=None,  # Will be set later in SLAM script
+        gt_pose=gt_pose,
+        camera_matrix=camera_matrix
+    )
+    
+    return frame
+    
     
     
 ## TESTING 

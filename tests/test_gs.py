@@ -9,7 +9,7 @@ from tqdm import tqdm
 from thirdparty.gaussian_splatting.gaussian_renderer import render
 from thirdparty.gaussian_splatting.scene.gaussian_model import GaussianModel
 from thirdparty.gaussian_splatting.utils.general_utils import build_rotation
-from thirdparty.gaussian_splatting.utils.dataset_bridge import get_camera_info_from_pyslam_dataloader_insteadofgs
+from utilities.dataset_bridge import get_camera_info_from_pyslam_dataloader_insteadofgs
 from munch import Munch
 # Import time 
 from datetime import datetime
