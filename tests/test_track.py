@@ -42,7 +42,7 @@ if groundtruth is not None:
 print("gt_traj3d: ", gt_traj3d.shape)
 
 frame1 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 0, config)
-frame2 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 100, config)
+frame2 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 60, config)
 
 img1 = frame1._image 
 img2 = frame2._image
@@ -97,12 +97,24 @@ matched_image = visualize_matches(img1_device, img2_device, kpts0, kpts1, matche
 # cv2.imshow("Matched Image", matched_image)
 # cv2.waitKey(0)
 
-
-
+origin_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+camera_axis1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2.0)
+camera_axis2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
 # Visualize point clouds 
 print("pcd1: ", pcd1)
 print("pcd2: ", pcd2)
-o3d.visualization.draw_geometries([pcd1, pcd2])
+# o3d.visualization.draw_geometries([pcd1, pcd2, camera_axis1, camera_axis2])
 
 
+# Check gt-pose quality by transforming the pcd1 with gt_pose1 and pcd2 with gt_pose2
+print("gt_pose1: ", gt_pose1)
+print("gt_pose2: ", gt_pose2)
+# Apply inverse transformation
+pcd1_gt = pcd1.transform(gt_pose1)
+pcd2_gt = pcd2.transform(gt_pose2)
+camera_axis1_gt = camera_axis1.transform(gt_pose1)
+camera_axis2_gt = camera_axis2.transform(gt_pose2)
+o3d.visualization.draw_geometries([pcd1_gt, pcd2_gt, camera_axis1_gt, camera_axis2_gt, origin_axis])
 
+# Impliment PnP - RANSAC tracking with OpenCV only with the matched keypoints
+# Define the camera intrinsic matrix
