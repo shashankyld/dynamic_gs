@@ -40,7 +40,7 @@ def find_matching_edges(prev_frame, curr_frame, matches):
             
     return prev_mapped_edges, curr_edges
 
-def find_dynamic_edges(prev_frame, curr_frame, prev_edges, curr_edges, threshold=4):
+def find_dynamic_edges(prev_frame, curr_frame, prev_edges, curr_edges, threshold=2):
     """Find edges that changed length significantly."""
     dynamic_edges = []
     
@@ -140,6 +140,50 @@ def visualize_edges(prev_frame, curr_frame, prev_edges, curr_edges, dynamic_edge
             cv2.polylines(vis_img, [hull_offset], True, colors[idx], 2)
             
     cv2.imshow("Edge Analysis", vis_img)
+    cv2.waitKey(1)
+    
+    return vis_img
+
+def visualize_dynamic_components(prev_frame, curr_frame, components):
+    """Visualize only the dynamic components (all except the largest component)."""
+    # Create side-by-side visualization
+    vis_img = np.hstack([prev_frame.image, curr_frame.image])
+    w = prev_frame.image.shape[1]
+    
+    if components and len(components) > 1:
+        # Skip the largest component (components[0]) and visualize the rest
+        dynamic_components = components[1:]
+        
+        # Colors for different dynamic components
+        colors = [(0,0,255), (255,0,255), (0,255,255), (255,165,0), (255,0,0)]
+        
+        for idx, comp in enumerate(dynamic_components):
+            # Get color (cycle through colors if more components than colors)
+            color = colors[idx % len(colors)]
+            
+            # Get points for this component
+            points = np.array([curr_frame.keypoints[i] for i in comp])
+            
+            # Draw convex hull
+            hull = cv2.convexHull(points.astype(np.int32))
+            
+            # Draw filled hull with some transparency
+            overlay = vis_img.copy()
+            hull_offset = hull.copy()
+            hull_offset[:,:,0] += w  # Offset for right image
+            cv2.fillPoly(overlay, [hull_offset], color)
+            cv2.addWeighted(overlay, 0.3, vis_img, 0.7, 0, vis_img)
+            
+            # Draw hull boundary
+            cv2.polylines(vis_img, [hull_offset], True, color, 2)
+            
+            # Add component size text
+            centroid = np.mean(hull_offset, axis=0)
+            cv2.putText(vis_img, f"Size: {len(comp)}", 
+                       (int(centroid[0][0]), int(centroid[0][1])),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    
+    cv2.imshow("Dynamic Components", vis_img)
     cv2.waitKey(1)
     
     return vis_img

@@ -18,7 +18,7 @@ from utilities.utils_misc import remove_duplicates_from_index_arrays, delaunay_w
 from utilities.utils_draw import visualize_matches
 from utilities.utils_edges import (find_matching_edges, find_dynamic_edges, 
                                  find_connected_components, create_dynamic_mask,
-                                 visualize_edges)
+                                 visualize_edges, visualize_dynamic_components)
 
 def create_edge_pairs(simplicies):
     """Create edge pairs from Delaunay triangulation simplicies."""
@@ -343,6 +343,8 @@ if __name__ == "__main__":
                                 if config.ShowDebugImages:
                                     visualize_edges(ref_frame, curr_frame, prev_edges, curr_edges, 
                                                  dynamic_edges, components)
+                                    # Add new visualization
+                                    visualize_dynamic_components(ref_frame, curr_frame, components)
                                     
                                 last_analysis_id = img_id
                                 last_analysis_frame = curr_frame
