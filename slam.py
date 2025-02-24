@@ -18,7 +18,7 @@ from utilities.utils_misc import remove_duplicates_from_index_arrays, delaunay_w
 from utilities.utils_draw import visualize_matches
 from utilities.utils_edges import (find_matching_edges, find_dynamic_edges, 
                                  find_connected_components, create_dynamic_mask,
-                                 visualize_edges, visualize_dynamic_components)
+                                 visualize_edges, visualize_dynamic_components, EdgeTracker)
 
 def create_edge_pairs(simplicies):
     """Create edge pairs from Delaunay triangulation simplicies."""
@@ -190,6 +190,11 @@ if __name__ == "__main__":
     last_analysis_id = starting_img_id  # Track when we last did analysis
     last_analysis_frame = None
     
+    # Initialize edge tracker
+    edge_tracker = EdgeTracker(history_size=3,  # Track edges over 3 frames
+                             dynamic_threshold=2,  # Length change threshold (pixels)
+                             consistency_threshold=0.7)  # Need 70% agreement
+    
     while True: 
         # Get current frame data
         if dataset.isOk(): 
@@ -329,8 +334,10 @@ if __name__ == "__main__":
                             prev_edges, curr_edges = find_matching_edges(ref_frame, curr_frame, matches)
                             
                             if prev_edges:
-                                # Find dynamic edges
-                                dynamic_edges = find_dynamic_edges(ref_frame, curr_frame, prev_edges, curr_edges)
+                                # Use edge tracker for temporal consistency
+                                dynamic_edges = find_dynamic_edges(ref_frame, curr_frame, 
+                                                                 prev_edges, curr_edges,
+                                                                 edge_tracker)
                                 
                                 # Find connected components
                                 components = find_connected_components(curr_edges, dynamic_edges)

@@ -1,6 +1,33 @@
 import numpy as np
 import cv2
 from utilities.utils_misc import delaunay_with_kps_new
+from collections import defaultdict, deque
+
+class EdgeTracker:
+    """Track edge length changes over time."""
+    def __init__(self, history_size=1, dynamic_threshold=0., consistency_threshold=0.7):
+        self.history_size = history_size  # Number of frames to track
+        self.dynamic_threshold = dynamic_threshold  # Length change threshold
+        self.consistency_threshold = consistency_threshold  # Fraction of frames needed
+        self.edge_history = defaultdict(lambda: deque(maxlen=history_size))
+        
+    def update(self, edge_pairs, length_changes):
+        """Update edge history with new measurements."""
+        for edge, change in zip(edge_pairs, length_changes):
+            # Sort edge vertices to ensure consistent key
+            edge_key = tuple(sorted(edge))
+            self.edge_history[edge_key].append(abs(change) > self.dynamic_threshold)
+            
+    def get_dynamic_edges(self):
+        """Get indices of consistently dynamic edges."""
+        dynamic_edges = []
+        for edge_key, history in self.edge_history.items():
+            if len(history) == self.history_size:
+                # Check if edge was marked dynamic in enough frames
+                dynamic_ratio = sum(history) / self.history_size
+                if dynamic_ratio >= self.consistency_threshold:
+                    dynamic_edges.append(edge_key)
+        return dynamic_edges
 
 def create_edge_pairs(simplicies):
     """Create edge pairs from Delaunay triangulation simplicies."""
@@ -40,23 +67,28 @@ def find_matching_edges(prev_frame, curr_frame, matches):
             
     return prev_mapped_edges, curr_edges
 
-def find_dynamic_edges(prev_frame, curr_frame, prev_edges, curr_edges, threshold=2):
-    """Find edges that changed length significantly."""
-    dynamic_edges = []
+def find_dynamic_edges(prev_frame, curr_frame, prev_edges, curr_edges, edge_tracker, threshold=2):
+    """Find edges that changed length significantly with temporal consistency."""
+    # Calculate edge length changes
+    length_changes = []
+    edge_pairs = []
     
-    # Calculate edge lengths
-    prev_lengths = [np.linalg.norm(prev_frame.keypoints[a] - prev_frame.keypoints[b]) 
-                   for a, b in prev_edges]
-    curr_lengths = [np.linalg.norm(curr_frame.keypoints[a] - curr_frame.keypoints[b]) 
-                   for a, b in curr_edges]
+    for i, (prev_edge, curr_edge) in enumerate(zip(prev_edges, curr_edges)):
+        prev_len = np.linalg.norm(prev_frame.keypoints[prev_edge[0]] - prev_frame.keypoints[prev_edge[1]])
+        curr_len = np.linalg.norm(curr_frame.keypoints[curr_edge[0]] - curr_frame.keypoints[curr_edge[1]])
+        length_changes.append(curr_len - prev_len)
+        edge_pairs.append(curr_edge)
     
-    # Find edges with significant length changes
-    for i, (prev_len, curr_len) in enumerate(zip(prev_lengths, curr_lengths)):
-        print(prev_len, curr_len)
-        if abs(prev_len - curr_len) > threshold:
-
-            dynamic_edges.append(i)
-            
+    # Update edge tracker
+    edge_tracker.update(edge_pairs, length_changes)
+    
+    # Get consistently dynamic edges
+    dynamic_edge_pairs = edge_tracker.get_dynamic_edges()
+    
+    # Convert edge pairs back to indices
+    dynamic_edges = [i for i, edge in enumerate(curr_edges) 
+                    if tuple(sorted(edge)) in dynamic_edge_pairs]
+    
     return dynamic_edges
 
 def find_connected_components(edges, dynamic_edges):
