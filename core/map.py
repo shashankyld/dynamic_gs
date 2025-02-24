@@ -1,6 +1,9 @@
 from typing import Dict, List, Set, Optional, Tuple
 import numpy as np
 from core.keyframe import Keyframe
+import pickle
+import os
+from datetime import datetime
 
 class MapPoint:
     """3D point in the map with observation info."""
@@ -21,7 +24,7 @@ class MapPoint:
             
 class Map:
     def __init__(self, local_window_size: int = 7):
-        self.keyframes: Dict[int, Keyframe] = {}
+        self.keyframes: Dict[int, Keyframe] = {} 
         self.map_points: Dict[int, MapPoint] = {}
         self.local_map_points: Set[int] = set()
         self.local_keyframes: List[int] = []  # Ordered list of recent keyframe IDs
@@ -195,3 +198,44 @@ class Map:
             status.append(f"Z: [{min_xyz[2]:.1f}, {max_xyz[2]:.1f}]")
             
         return "\n".join(status)
+    
+    def save(self, save_dir: str = "logs/slam_map"):
+        """Save map object to file."""
+        # Create timestamp directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = os.path.join(save_dir, timestamp)
+        os.makedirs(save_path, exist_ok=True)
+        
+        # Prepare data for saving
+        map_data = {
+            'keyframes': self.keyframes,
+            'map_points': self.map_points,
+            'local_map_points': self.local_map_points,
+            'local_keyframes': self.local_keyframes,
+            'local_window_size': self.local_window_size,
+            'next_point_id': self.next_point_id
+        }
+        
+        # Save map data
+        filepath = os.path.join(save_path, "map.pkl")
+        with open(filepath, 'wb') as f:
+            pickle.dump(map_data, f)
+        
+        print(f"Map saved to {filepath}")
+        return filepath
+    
+    @classmethod
+    def load(cls, filepath: str):
+        """Load map object from file."""
+        with open(filepath, 'rb') as f:
+            map_data = pickle.load(f)
+            
+        map_obj = cls(local_window_size=map_data['local_window_size'])
+        map_obj.keyframes = map_data['keyframes']
+        map_obj.map_points = map_data['map_points']
+        map_obj.local_map_points = map_data['local_map_points']
+        map_obj.local_keyframes = map_data['local_keyframes']
+        map_obj.next_point_id = map_data['next_point_id']
+        
+        print(f"Map loaded from {filepath}")
+        return map_obj

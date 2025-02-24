@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     # Initialize processing variables
     starting_img_id = config.start_frame_id
-    ending_img_id = starting_img_id + 10
+    ending_img_id = config.end_frame_id
     img_id = starting_img_id
     global_poses = {}
     accumulated_clouds = {}
@@ -84,8 +84,8 @@ if __name__ == "__main__":
                 # Convert to torch tensor
                 img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
                 
-                # Store point cloud if valid
-                accumulated_clouds[img_id] = point_cloud
+                # # Store point cloud if valid
+                # accumulated_clouds[img_id] = point_cloud
                 
                 # Get pose from groundtruth if available
                 if groundtruth is not None and gt_poses is not None and gt_timestamps is not None:
@@ -177,11 +177,19 @@ if __name__ == "__main__":
             print("Reached end frame ID")
             print("Visualizing final map...")
             
+            # Save the map
+            saved_map_path = slam.map.save()
+            print(f"Map saved to: {saved_map_path}")
+            
             # Visualize only the map points and keyframe trajectory
             visualize_global_map(slam.map,  
-                               title=f"Final Map - {len(slam.map.keyframes)} keyframes", dense=True)
+                               title=f"Final Map - {len(slam.map.keyframes)} keyframes", 
+                               dense=True)
+            
+
             
             # Visualize accumulated point clouds
+            '''
             pcd_list = []
             for i in range(len(global_poses)):
                 if i in accumulated_clouds:
@@ -196,5 +204,6 @@ if __name__ == "__main__":
                     axis.transform(pose)
                     pcd_list.append(axis)
             o3d.visualization.draw_geometries(pcd_list)
+            '''
                     
             break

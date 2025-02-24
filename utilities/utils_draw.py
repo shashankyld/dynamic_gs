@@ -590,7 +590,7 @@ def visualize_global_map(map_obj, title="Global Map Visualization", dense=False)
         if keyframe.pose is not None:
             # Add keyframe coordinate
             frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
-            frame.transform(keyframe.pose)
+            frame.transform(np.linalg.inv(keyframe.pose))
             vis.add_geometry(frame)
             
             # Add dense point cloud if requested
@@ -630,7 +630,7 @@ def visualize_global_map(map_obj, title="Global Map Visualization", dense=False)
     # Add trajectory
     if len(map_obj.keyframes) > 1:
         trajectory = o3d.geometry.LineSet()
-        points = [kf.pose[:3, 3] for kf in map_obj.keyframes.values() if kf.pose is not None]
+        points = [np.linalg.inv(kf.pose)[:3, 3] for kf in map_obj.keyframes.values() if kf.pose is not None]
         lines = [[i, i+1] for i in range(len(points)-1)]
         if points:
             trajectory.points = o3d.utility.Vector3dVector(points)
