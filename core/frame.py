@@ -198,3 +198,22 @@ class Frame:
     @property
     def dynamic_mask(self) -> Optional[np.ndarray]:
         return self._dynamic_mask
+
+    def __str__(self) -> str:
+        status = []
+        status.append(f"Frame {self.id} ({self.frame_type.name})")
+        status.append(f"Timestamp: {self.timestamp:.3f}s")
+        
+        if self._image is not None:
+            status.append(f"Image: {self._image.shape}")
+        if self._depth is not None:
+            status.append(f"Depth: {self._depth.shape}, range [{self._depth.min():.2f}, {self._depth.max():.2f}]m")
+        if self.keypoints is not None:
+            status.append(f"Features: {len(self.keypoints)} keypoints")
+            status.append(f"Dynamic features: {len(self.dynamic_kp_indices)}")
+        
+        if self.pose is not None:
+            pos = self.pose[:3, 3]
+            status.append(f"Position: [{pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}]")
+            
+        return "\n".join(status)

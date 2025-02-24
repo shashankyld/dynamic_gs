@@ -59,6 +59,15 @@ class Config(object):
         self.NumFramesAway = slam_parameters.SlamParameters.kNumFramesAway
         self.num_features_to_extract = slam_parameters.SlamParameters.kNumFeatures
         self.ShowDebugImages = slam_parameters.SlamParameters.kShowDebugImages
+        self.NumLocalKFs = slam_parameters.SlamParameters.kNumLocalKFs
+        
+        # New SLAM Parameters
+        self.min_distance_between_kfs = slam_parameters.SlamParameters.MIN_DISTANCE_BETWEEN_KEYFRAMES
+        self.min_rotation_between_kfs = slam_parameters.SlamParameters.MIN_ROTATION_BETWEEN_KEYFRAMES
+        self.max_frames_between_kfs = slam_parameters.SlamParameters.MAX_FRAMES_BETWEEN_KEYFRAMES
+        self.min_inlier_threshold = slam_parameters.SlamParameters.MIN_INLIER_THRESHOLD
+        self.min_keyframe_matches = slam_parameters.SlamParameters.MIN_KEYFRAME_MATCHES
+
         self.get_dataset_settings()
         self.get_cam_settings()
         self.get_feature_manager_settings()
@@ -243,6 +252,25 @@ class Config(object):
                 self._stereo_settings = {'left':left, 'right':right}
         #print(f'[config] stereo settings: {self._stereo_settings}')
         return self._stereo_settings
+
+    @property
+    def slam_params(self):
+        """Get all SLAM parameters as a dictionary."""
+        if not hasattr(self, '_slam_params'):
+            self._slam_params = {
+                'start_frame': self.start_frame_id,
+                'end_frame': self.end_frame_id,
+                'num_frames_away': self.NumFramesAway,
+                'num_features': self.num_features_to_extract,
+                'show_debug': self.ShowDebugImages,
+                'num_local_kfs': self.NumLocalKFs,
+                'min_distance_kf': self.min_distance_between_kfs,
+                'min_rotation_kf': self.min_rotation_between_kfs,
+                'max_frames_kf': self.max_frames_between_kfs,
+                'min_inliers': self.min_inlier_threshold,
+                'min_matches': self.min_keyframe_matches
+            }
+        return self._slam_params
 
    
 if __name__ != "__main__":

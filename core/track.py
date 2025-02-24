@@ -12,6 +12,16 @@ from thirdparty.LightGlue.lightglue.utils import rbd
 from typing import Optional, Tuple
 from core.frame import Frame
 
+def convert_image_to_tensor(img: np.ndarray) -> torch.Tensor:
+    """Convert image to normalized torch tensor with correct channel order."""
+    if img.ndim == 2:  # Grayscale
+        # Add channel dimension and repeat to make 3 channels
+        img_tensor = torch.from_numpy(img).float()[None] / 255.0
+        img_tensor = img_tensor.repeat(3, 1, 1)  # Convert to 3 channels
+    else:  # RGB
+        img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+    return img_tensor
+
 class Tracker:
     """Simple frame-to-frame tracker using SuperPoint features and PnP."""
     
@@ -25,24 +35,40 @@ class Tracker:
         self.extractor = SuperPoint(max_num_keypoints=num_features).eval().to(self.device)
         self.matcher = LightGlue(features="superpoint").eval().to(self.device)
 
-    def track_frames(self, frame1: Frame, frame2: Frame) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        """
-        Track frame2 relative to frame1 using feature matching and PnP.
-        Returns relative pose and inlier indices.
-        # Relative pose is the transformation from frame1 to frame2
-        # Example - O2 = T12 @ O1
-        # p2 = T12 @ p1
-        # p1 = T12_inv @ p2
-        """
-        # Extract features
+    def extract_features(self, frame: Frame) -> bool:
+        """Extract features from frame if not already present."""
+        if frame.keypoints is not None:
+            return True
+            
+        if frame.image is None:
+            return False
+            
         with torch.no_grad():
-            # Prepare images
-            img1 = torch.from_numpy(frame1.image).permute(2,0,1).float()/255.0
-            img2 = torch.from_numpy(frame2.image).permute(2,0,1).float()/255.0
+            img = convert_image_to_tensor(frame.image).unsqueeze(0).to(self.device)
+            feat = self.extractor.extract(img)
+            feats = rbd(feat)
+            
+            frame.keypoints = feats["keypoints"].cpu().numpy()
+            frame.descriptors = feats["descriptors"].cpu().numpy()
+            
+        return True
+
+    def track_frames(self, frame1: Frame, frame2: Frame) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """Track frame2 relative to frame1 using feature matching and PnP."""
+        # Check for required data
+        if (not self.extract_features(frame1) or not self.extract_features(frame2) or 
+            frame1.depth is None or frame2.depth is None):
+            print("[Tracker] Missing features or depth data")
+            return None, None
+
+        with torch.no_grad():
+            # Convert images to tensors
+            img1 = convert_image_to_tensor(frame1.image).unsqueeze(0).to(self.device)
+            img2 = convert_image_to_tensor(frame2.image).unsqueeze(0).to(self.device)
             
             # Extract and match features
-            feat1 = self.extractor.extract(img1.unsqueeze(0).to(self.device))
-            feat2 = self.extractor.extract(img2.unsqueeze(0).to(self.device))
+            feat1 = self.extractor.extract(img1)
+            feat2 = self.extractor.extract(img2)
             matches_out = self.matcher({"image0": feat1, "image1": feat2})
             
             # Get keypoints and matches
@@ -56,6 +82,7 @@ class Tracker:
         # Prepare 3D-2D correspondences for PnP
         obj_points = []  # 3D points from frame1
         img_points = []  # 2D points from frame2
+        valid_matches = []
         
         for m in matches:
             idx1, idx2 = int(m[0]), int(m[1])
@@ -64,11 +91,13 @@ class Tracker:
             
             # Get depth for keypoint in frame1
             u, v = int(round(kp1[0])), int(round(kp1[1]))
-            if u < 0 or v < 0 or v >= frame1.depth.shape[0] or u >= frame1.depth.shape[1]:
+            
+            # Add boundary and depth checks
+            if not (0 <= v < frame1.depth.shape[0] and 0 <= u < frame1.depth.shape[1]):
                 continue
                 
             depth = frame1.depth[v, u]
-            if depth <= 0:
+            if depth <= 0 or not np.isfinite(depth):
                 continue
                 
             # Backproject to 3D
@@ -76,11 +105,17 @@ class Tracker:
             Y = (kp1[1] - self.camera_matrix[1,2]) * depth / self.camera_matrix[1,1]
             Z = depth
             
+            # Skip points with invalid 3D coordinates
+            if not (np.isfinite(X) and np.isfinite(Y) and np.isfinite(Z)):
+                continue
+                
             obj_points.append([X, Y, Z])
             img_points.append(kp2)
+            valid_matches.append([idx1, idx2])
 
         # Check if we have enough points
         if len(obj_points) < 6:
+            print(f"[Tracker] Not enough valid matches: {len(obj_points)} < 6")
             return None, None
 
         # Solve PnP
@@ -115,13 +150,23 @@ class Tracker:
     def track_frames_with_mask(self, frame1: Frame, frame2: Frame, 
                              mask: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Track frame2 relative to frame1 using only features within the mask."""
+        # Check for required data
+        if (not self.extract_features(frame1) or not self.extract_features(frame2) or 
+            frame1.depth is None or frame2.depth is None):
+            print("[Tracker] Missing features or depth data")
+            return None, None
+
+        # Ensure both frames have features
+        if not self.extract_features(frame1) or not self.extract_features(frame2):
+            return None, None
+
         with torch.no_grad():
-            # Extract features (same as before)
-            img1 = torch.from_numpy(frame1.image).permute(2,0,1).float()/255.0
-            img2 = torch.from_numpy(frame2.image).permute(2,0,1).float()/255.0
+            # Convert images to tensors
+            img1 = convert_image_to_tensor(frame1.image).unsqueeze(0).to(self.device)
+            img2 = convert_image_to_tensor(frame2.image).unsqueeze(0).to(self.device)
             
-            feat1 = self.extractor.extract(img1.unsqueeze(0).to(self.device))
-            feat2 = self.extractor.extract(img2.unsqueeze(0).to(self.device))
+            feat1 = self.extractor.extract(img1)
+            feat2 = self.extractor.extract(img2)
             
             # Get keypoints and descriptors
             feats1, feats2 = [rbd(x) for x in [feat1, feat2]]
@@ -228,3 +273,23 @@ class Tracker:
 
         # Return transformation and inliers
         return T, inliers
+
+    def __str__(self) -> str:
+        """Return human-readable tracker status."""
+        status = []
+        status.append("Tracker Configuration:")
+        status.append(f"Device: {self.device}")
+        status.append(f"Number of features: {self.extractor.conf.max_num_keypoints}")  # Fixed attribute name
+        status.append(f"Feature extractor: SuperPoint")
+        status.append(f"Matcher: LightGlue")
+        
+        # Camera parameters
+        fx = self.camera_matrix[0,0]
+        fy = self.camera_matrix[1,1]
+        cx = self.camera_matrix[0,2]
+        cy = self.camera_matrix[1,2]
+        status.append(f"\nCamera Parameters:")
+        status.append(f"fx={fx:.1f}, fy={fy:.1f}")
+        status.append(f"cx={cx:.1f}, cy={cy:.1f}")
+        
+        return "\n".join(status)

@@ -4,18 +4,29 @@ import numpy as np
 from typing import List, Dict, Set
 
 class Keyframe(Frame):
+    _next_id = 0
+    
     def __init__(self, frame: Frame):
-        super().__init__(frame.id, frame.timestamp, frame.image, frame.depth)
-        self.__dict__.update(frame.__dict__)  # Copy all frame attributes
+        super().__init__(frame.image, frame.depth, frame.camera_matrix)
+        self.id = Keyframe._next_id
+        Keyframe._next_id += 1
         
-        # Additional Keyframe-specific attributes
-        self.local_gaussians: List[int] = []  # Indices of associated gaussians
-        self.reference_frame_id = -1
-        self.loop_closure_candidates: List[int] = []
+        # Copy frame data
+        self.pose = frame.pose.copy() if frame.pose is not None else None
+        self.keypoints = frame.keypoints.copy() if frame.keypoints is not None else None
+        self.descriptors = frame.descriptors.copy() if frame.descriptors is not None else None
+        self.gt_pose = frame.gt_pose.copy() if frame.gt_pose is not None else None
+        self.timestamp = frame.timestamp
         
-        # Factor graph related
-        self.pose_key = gtsam.symbol('x', self.id)
+        # Additional keyframe specific data
+        self.visible_map_points: Set[int] = set()
+        self.connected_keyframes: Set[int] = set()
         self.factors: List[gtsam.NonlinearFactor] = []
+        
+    @property
+    def pose_key(self) -> int:
+        """Get pose key for GTSAM optimization."""
+        return gtsam.symbol('x', self.id)
         
     def add_odometry_factor(self, prev_keyframe, 
                            noise_model: gtsam.noiseModel.Base = None):
@@ -49,3 +60,14 @@ class Keyframe(Frame):
             noise_model)
         
         self.factors.append(factor)
+        
+    def __str__(self) -> str:
+        status = [super().__str__()]  # Get Frame info first
+        
+        status.append("\nKeyframe-specific:")
+        status.append(f"Reference frame: {self.reference_frame_id}")
+        status.append(f"Local gaussians: {len(self.local_gaussians)}")
+        status.append(f"Loop candidates: {len(self.loop_closure_candidates)}")
+        status.append(f"GTSAM factors: {len(self.factors)}")
+        
+        return "\n".join(status)
