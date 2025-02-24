@@ -13,12 +13,14 @@ from utilities.utils_depth import depth2pointcloud
 from utilities.utils_draw import visualize_matches  
 from io_utils.dataset import dataset_factory
 from io_utils.ground_truth import groundtruth_factory
+import copy
 
 
 config = Config()
 groundtruth = groundtruth_factory(config.dataset_settings)
 dataset = dataset_factory(config)
 depthmapfactor = config.cam_settings["DepthMapFactor"]
+print("depthmapfactor: ", depthmapfactor)
 depth_scale = 1/depthmapfactor
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -41,8 +43,24 @@ if groundtruth is not None:
 
 print("gt_traj3d: ", gt_traj3d.shape)
 
+
+# ### Visualize the trajectory with axes in Open3D
+# traj = []
+# for i in range(gt_poses.shape[0]+1):
+#     if i == 0:
+#         origin_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+#         traj.append(origin_axis)
+#     else:
+#         pose = gt_poses[i-1]
+#         axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+#         axis = axis.transform(pose)
+#         traj.append(axis)
+# o3d.visualization.draw_geometries(traj)
+
+
+
 frame1 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 0, config)
-frame2 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 60, config)
+frame2 = get_frame_from_pyslam_dataloader(dataset, groundtruth, 10, config)
 
 img1 = frame1._image 
 img2 = frame2._image
@@ -68,12 +86,38 @@ pc1 = depth2pointcloud(depth1, img1, c_fx, c_fy, c_cx, c_cy, max_depth=100000.0,
 pc1_colors = pc1.colors
 pc2 = depth2pointcloud(depth2, img2, c_fx, c_fy, c_cx, c_cy, max_depth=100000.0, min_depth=0.0)
 pc2_colors = pc2.colors
+
+
 pcd1 = o3d.geometry.PointCloud()
 pcd1.points = o3d.utility.Vector3dVector(pc1.points)
 pcd1.colors = o3d.utility.Vector3dVector(pc1_colors)
+pcd1_copy = copy.deepcopy(pcd1)
+# Transform the point cloud to the world frame 
+pcd1.transform(gt_pose1)
+
 pcd2 = o3d.geometry.PointCloud()
 pcd2.points = o3d.utility.Vector3dVector(pc2.points)
 pcd2.colors = o3d.utility.Vector3dVector(pc2_colors)
+# CHANGE COLORS - GREEN TINT
+pcd2_colors = np.array(pcd2.colors)
+pcd2_colors[:, 0] *= 0.5 
+pcd2.colors = o3d.utility.Vector3dVector(pcd2_colors)
+pcd2_copy = copy.deepcopy(pcd2)
+# Transform the point cloud to the world frame 
+pcd2.transform(gt_pose2)
+
+
+# Origin 
+origin_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2.0)
+pose1_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+pose1_axis = pose1_axis.transform(gt_pose1)
+pose2_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+pose2_axis = pose2_axis.transform(gt_pose2)
+
+# Visualize point clouds
+print("Visualizing point clouds")
+o3d.visualization.draw_geometries([ origin_axis,  pcd1, pose1_axis, pcd2, pose2_axis])
+
 
 
 img1_device = torch.from_numpy(img1).permute(2, 0, 1).float() / 255.0
@@ -94,27 +138,6 @@ m_kpts0, m_kpts1 = kpts0[matches[:, 0]], kpts1[matches[:, 1]]
 
 # Visualize matches
 matched_image = visualize_matches(img1_device, img2_device, kpts0, kpts1, matches)
-# cv2.imshow("Matched Image", matched_image)
-# cv2.waitKey(0)
+cv2.imshow("Matched Image", matched_image)
+cv2.waitKey(0)
 
-origin_axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
-camera_axis1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2.0)
-camera_axis2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
-# Visualize point clouds 
-print("pcd1: ", pcd1)
-print("pcd2: ", pcd2)
-# o3d.visualization.draw_geometries([pcd1, pcd2, camera_axis1, camera_axis2])
-
-
-# Check gt-pose quality by transforming the pcd1 with gt_pose1 and pcd2 with gt_pose2
-print("gt_pose1: ", gt_pose1)
-print("gt_pose2: ", gt_pose2)
-# Apply inverse transformation
-pcd1_gt = pcd1.transform(gt_pose1)
-pcd2_gt = pcd2.transform(gt_pose2)
-camera_axis1_gt = camera_axis1.transform(gt_pose1)
-camera_axis2_gt = camera_axis2.transform(gt_pose2)
-o3d.visualization.draw_geometries([pcd1_gt, pcd2_gt, camera_axis1_gt, camera_axis2_gt, origin_axis])
-
-# Impliment PnP - RANSAC tracking with OpenCV only with the matched keypoints
-# Define the camera intrinsic matrix

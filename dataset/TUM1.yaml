@@ -31,7 +31,7 @@ Camera.RGB: 0
 ThDepth: 40.0
 
 # Deptmap values factor 
-DepthMapFactor: 1  # Original 5000
+DepthMapFactor: 5000  # Original 5000
 
 #--------------------------------------------------------------------------------------------
 # Features extraction 
