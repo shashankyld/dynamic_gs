@@ -4,6 +4,7 @@ from io_utils.dataset import dataset_factory, SensorType
 from io_utils.ground_truth import groundtruth_factory
 import logging 
 from utilities.utils_depth import depth2pointcloud
+from utilities.utils_metrics import estimate_error_R_T
 import cv2
 from thirdparty.LightGlue.lightglue import LightGlue, SuperPoint
 import torch
@@ -132,6 +133,13 @@ if __name__ == "__main__":
                     print("Short Trajectory: ", short_trajectory)
                     print("Processing frame: ", img_id)
 
+
+                    
+
+                    if img_id in global_poses: # SETTING POSE TO GT
+                        print("Setting pose of frame : ", img_id, " to GT")
+                        # curr_frame.pose = global_poses[img_id]
+
                     prev_frame = curr_frame
                     
 
@@ -159,6 +167,33 @@ if __name__ == "__main__":
                     print("Tracking frame: ", img_id, " with previous keyframe")
                     tracking_status = slam.track_frame(curr_frame, dynamic_mask=dynamic_mask)
                     print("Tracking status: ", tracking_status)
+
+                    ## Update the pose of the current frame with the ground truth pose if available
+                    if img_id in global_poses: ## SETTING POSE TO GT
+                        print("Setting pose of frame : ", img_id, " to GT")
+                        # curr_frame.pose = global_poses[img_id]
+                    
+                    ## ERROR CALUCLATION
+                    print("Prev frame pose: ", prev_frame.pose)
+                    print("Curr frame pose: ", curr_frame.pose)
+                    relative_pose = np.linalg.inv(prev_frame.pose) @ curr_frame.pose 
+                    relative_pose_gt = np.linalg.inv(global_poses[prev_frame.id]) @ global_poses[curr_frame.id]
+                    # ERROR IN RELATIVE POSE CALCULATION
+                    angle_err, t_err = estimate_error_R_T(relative_pose, relative_pose_gt)
+                    print("Local Rotation error (degrees):", angle_err)
+                    print("Local Translation error (meters):", t_err)
+
+                    absolute_pose = global_poses[0] @ curr_frame.pose
+                    absolute_pose_gt = global_poses[curr_frame.id]
+                    # ERROR IN ABSOLUTE POSE CALCULATION
+                    angle_err, t_err = estimate_error_R_T(absolute_pose, absolute_pose_gt)
+                    print("Global Rotation error (degrees):", angle_err)
+                    print("Global Translation error (meters):", t_err)
+
+
+                    prev_frame = curr_frame
+
+                    
 
 
 

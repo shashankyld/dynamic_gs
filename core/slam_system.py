@@ -55,10 +55,10 @@ class SLAMSystem:
         # Ensure frame has features
         if not self.tracker.extract_features(frame):
             return False
-            
+        
+        frame.pose = np.eye(4)
         # Convert first frame to keyframe
         keyframe = Keyframe(frame)
-        keyframe.pose = np.eye(4)  # Set as origin
         
         # Add to map
         self.map.add_keyframe(keyframe)
