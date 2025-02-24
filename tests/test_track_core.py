@@ -127,5 +127,16 @@ def main():
         pose_gt            # Ground truth Frame 2 pose
     ])
 
+    pcd1_core_points, pcd1_core_colors = frame1.get_points(global_coords=True)
+    pcd2_core_points, pcd2_core_colors = frame2.get_points(global_coords=True)
+    pcd1_core = o3d.geometry.PointCloud()
+    pcd1_core.points = o3d.utility.Vector3dVector(pcd1_core_points)
+    pcd1_core.colors = o3d.utility.Vector3dVector(pcd1_core_colors)
+    pcd2_core = o3d.geometry.PointCloud()
+    pcd2_core.points = o3d.utility.Vector3dVector(pcd2_core_points)
+    pcd2_core.colors = o3d.utility.Vector3dVector(pcd2_core_colors)
+    o3d.visualization.draw_geometries([pcd1_core, pcd2_core, origin])
+
+
 if __name__ == "__main__":
     main()

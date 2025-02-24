@@ -23,6 +23,10 @@ class Tracker:
         """
         Track frame2 relative to frame1 using feature matching and PnP.
         Returns relative pose and inlier indices.
+        # Relative pose is the transformation from frame1 to frame2
+        # Example - O2 = T12 @ O1
+        # p2 = T12 @ p1
+        # p1 = T12_inv @ p2
         """
         # Extract features
         with torch.no_grad():

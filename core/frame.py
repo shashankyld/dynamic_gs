@@ -148,6 +148,45 @@ class Frame:
         inv_pose[:3, 3] = -self.pose[:3, :3].T @ self.pose[:3, 3]
         return inv_pose
     
+    def get_points(self, global_coords: bool = False) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """
+        Get point cloud from depth image.
+        
+        Args:
+            global_coords: If True, return points in global coordinates using current pose.
+                         If False, return points in camera coordinates.
+        
+        Returns:
+            Tuple of (points, colors) or None if depth/image not available.
+            - points: Nx3 array of 3D points
+            - colors: Nx3 array of RGB colors
+        """
+        if self._depth is None or self._image is None or self.camera_matrix is None:
+            return None
+            
+        # Get 3D points from depth
+        rows, cols = self._depth.shape
+        y, x = np.mgrid[0:rows, 0:cols]
+        points = np.stack([(x - self.cx) * self._depth / self.fx,
+                          (y - self.cy) * self._depth / self.fy,
+                           self._depth], axis=-1)
+        
+        # Filter out invalid depths
+        valid_mask = self._depth > 0
+        points = points[valid_mask]
+        
+        # Get corresponding colors
+        colors = self._image[valid_mask] / 255.0  # Normalize to [0,1]
+        
+        # Transform to global coordinates if requested - using current pose
+        if global_coords and self.pose is not None:
+            # Convert to homogeneous coordinates
+            points_h = np.hstack((points, np.ones((points.shape[0], 1))))
+            # Transform and convert back to 3D
+            points = (np.linalg.inv(self.pose) @ points_h.T).T[:, :3]
+            
+        return points, colors
+
     @property
     def image(self) -> Optional[np.ndarray]:
         return self._image
