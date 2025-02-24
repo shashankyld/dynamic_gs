@@ -52,7 +52,9 @@ def find_dynamic_edges(prev_frame, curr_frame, prev_edges, curr_edges, threshold
     
     # Find edges with significant length changes
     for i, (prev_len, curr_len) in enumerate(zip(prev_lengths, curr_lengths)):
+        print(prev_len, curr_len)
         if abs(prev_len - curr_len) > threshold:
+
             dynamic_edges.append(i)
             
     return dynamic_edges
