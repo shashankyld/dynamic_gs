@@ -183,7 +183,7 @@ if __name__ == "__main__":
                     print("Local Rotation error (degrees):", angle_err)
                     print("Local Translation error (meters):", t_err)
 
-                    absolute_pose = global_poses[0] @ curr_frame.pose
+                    absolute_pose = global_poses[starting_img_id] @ curr_frame.pose
                     absolute_pose_gt = global_poses[curr_frame.id]
                     # ERROR IN ABSOLUTE POSE CALCULATION
                     angle_err, t_err = estimate_error_R_T(absolute_pose, absolute_pose_gt)
