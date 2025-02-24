@@ -14,128 +14,6 @@ from collections import deque
 from utilities.dataset_bridge import get_frame_from_pyslam_dataloader
 from core.slam_system import SLAMSystem as SLAM
 import open3d as o3d
-from utilities.utils_misc import remove_duplicates_from_index_arrays, delaunay_with_kps_new
-from utilities.utils_draw import visualize_matches
-from utilities.utils_edges import (find_matching_edges, find_dynamic_edges, 
-                                 find_connected_components, create_dynamic_mask,
-                                 visualize_edges)
-
-def create_edge_pairs(simplicies):
-    """Create edge pairs from Delaunay triangulation simplicies."""
-    edge_pairs = []
-    for simplex in simplicies:
-        a, b, c = simplex
-        for edge in [(a,b), (b,c), (c,a)]:
-            if edge not in edge_pairs and (edge[1], edge[0]) not in edge_pairs:
-                edge_pairs.append(edge)
-    return edge_pairs
-
-def analyze_edges(frame1, frame2, matches, prev_edges=None):
-    """Analyze edges between two frames, returns dynamic edges."""
-    idxs_ref, idxs_cur = matches[:, 0], matches[:, 1]
-    idxs_ref, idxs_cur = remove_duplicates_from_index_arrays(idxs_ref, idxs_cur)
-    
-    # Create mappings between indices
-    idxs_ref_dict = dict(zip(idxs_ref, idxs_cur))
-    idxs_cur_dict = dict(zip(idxs_cur, idxs_ref))
-    
-    # If no previous edges, create from Delaunay
-    if prev_edges is None:
-        prev_tri_simplicies, _, _ = delaunay_with_kps_new(
-            frame1.img, frame1.keypoints, idxs_ref)
-        prev_edges = create_edge_pairs(prev_tri_simplicies)
-    
-    # Map edges to current frame
-    curr_edges = []
-    prev_mapped_edges = []
-    
-    for edge in prev_edges:
-        a, b = edge
-        if a in idxs_ref_dict and b in idxs_ref_dict:
-            curr_a = idxs_ref_dict[a]
-            curr_b = idxs_ref_dict[b]
-            curr_edges.append((curr_a, curr_b))
-            prev_mapped_edges.append((a, b))
-    
-    # Calculate edge lengths and identify dynamic edges
-    dynamic_edges = []
-    if curr_edges:
-        lengths_prev = [np.linalg.norm(frame1.keypoints[a] - frame1.keypoints[b]) 
-                       for a, b in prev_mapped_edges]
-        lengths_curr = [np.linalg.norm(frame2.keypoints[a] - frame2.keypoints[b]) 
-                       for a, b in curr_edges]
-        
-        # Identify dynamic edges (threshold from slam_backup.py)
-        dynamic_threshold = 4  # pixels
-        dynamic_edges = [i for i, (l1, l2) in enumerate(zip(lengths_prev, lengths_curr)) 
-                        if abs(l1 - l2) > dynamic_threshold]
-    
-    return curr_edges, dynamic_edges
-
-def find_connected_components(edges, dynamic_edges):
-    """Find connected components excluding dynamic edges."""
-    # Create adjacency matrix
-    graph = {}
-    for i, (a, b) in enumerate(edges):
-        if i not in dynamic_edges:
-            if a not in graph: graph[a] = []
-            if b not in graph: graph[b] = []
-            graph[a].append(b)
-            graph[b].append(a)
-    
-    # DFS to find components
-    def dfs(node, visited, component):
-        visited[node] = True
-        component.append(node)
-        for neighbor in graph.get(node, []):
-            if not visited.get(neighbor, False):
-                dfs(neighbor, visited, component)
-                
-    visited = {}
-    components = []
-    for node in graph:
-        if not visited.get(node, False):
-            component = []
-            dfs(node, visited, component)
-            if len(component) > 2:  # Only keep components with more than 2 points
-                components.append(component)
-    
-    return sorted(components, key=len, reverse=True)
-
-def visualize_dynamic_analysis(frame1, frame2, edges, dynamic_edges, components=None):
-    """Visualize dynamic edge analysis results."""
-    stacked = np.hstack([frame1.img, frame2.img])
-    w = frame1.img.shape[1]
-    
-    # Draw edges (green=static, red=dynamic)
-    for i, (a, b) in enumerate(edges):
-        color = (0, 0, 255) if i in dynamic_edges else (0, 255, 0)
-        # Draw in first frame
-        pt1 = tuple(map(int, frame1.keypoints[a]))
-        pt2 = tuple(map(int, frame1.keypoints[b]))
-        cv2.line(stacked, pt1, pt2, color, 2)
-        # Draw in second frame (offset by width)
-        pt1 = (int(frame2.keypoints[a][0] + w), int(frame2.keypoints[a][1]))
-        pt2 = (int(frame2.keypoints[b][0] + w), int(frame2.keypoints[b][1]))
-        cv2.line(stacked, pt1, pt2, color, 2)
-    
-    # Draw components if available
-    if components:
-        colors = [(255,0,0), (0,255,255), (255,0,255)]  # Different colors for top components
-        for idx, comp in enumerate(components[:3]):  # Show top 3 components
-            color = colors[idx % len(colors)]
-            # Draw convex hulls
-            pts = np.array([frame2.keypoints[i] for i in comp], dtype=np.int32)
-            hull = cv2.convexHull(pts)
-            # Draw in second frame (offset by width)
-            hull_offset = hull.copy()
-            hull_offset[:,:,0] += w
-            cv2.polylines(stacked, [hull_offset], True, color, 2)
-    
-    cv2.imshow("Dynamic Analysis", stacked)
-    cv2.waitKey(1)
-    
-    return stacked
 
 
 if __name__ == "__main__":
@@ -186,10 +64,7 @@ if __name__ == "__main__":
     skipped_frames = set()
     # Short_trajectory Will contain the last few selected frames as a queue - this will have frames from ::: curr_frame - kNumFramesAway to curr_frame - 1
     short_trajectory = deque(maxlen=kNumFramesAway) 
-    prev_edges = None  # Store edges from previous analysis
-    last_analysis_id = starting_img_id  # Track when we last did analysis
-    last_analysis_frame = None
-    
+   
     while True: 
         # Get current frame data
         if dataset.isOk(): 
@@ -269,7 +144,10 @@ if __name__ == "__main__":
 
 
                     prev_frame = curr_frame
-                    last_analysis_frame = curr_frame
+                    
+
+                    
+
                     
                 else: 
                     # 1. Create a frame object with the current frame, camera matrix, pose, depth, image, keypoints, descriptors
@@ -318,40 +196,17 @@ if __name__ == "__main__":
 
                     prev_frame = curr_frame
 
-                    # Analyze dynamic objects every kNumFramesAway frames
-                    if img_id - last_analysis_id >= kNumFramesAway:
-                        ref_frame = short_trajectory[0]  # Get frame from kNumFramesAway ago
-                        
-                        # Match frames
-                        matches = slam.tracker.match_frames(ref_frame, curr_frame)
-                        if matches is not None and len(matches) > 10:  # Ensure enough matches
-                            # Analyze edges and find dynamic objects
-                            prev_edges, curr_edges = find_matching_edges(ref_frame, curr_frame, matches)
-                            
-                            if prev_edges:
-                                # Find dynamic edges
-                                dynamic_edges = find_dynamic_edges(ref_frame, curr_frame, prev_edges, curr_edges)
-                                
-                                # Find connected components
-                                components = find_connected_components(curr_edges, dynamic_edges)
-                                
-                                # Create dynamic mask
-                                dynamic_mask = create_dynamic_mask(curr_frame, components)
-                                curr_frame._dynamic_mask = dynamic_mask
-                                
-                                # Visualize results
-                                if config.ShowDebugImages:
-                                    visualize_edges(ref_frame, curr_frame, prev_edges, curr_edges, 
-                                                 dynamic_edges, components)
-                                    
-                                last_analysis_id = img_id
-                                last_analysis_frame = curr_frame
                     
-                    # Track frame with dynamic mask
-                    tracking_status = slam.track_frame(curr_frame, 
-                                                    dynamic_mask=getattr(curr_frame, '_dynamic_mask', None))
+
+
+
+
                     
-                    # ...rest of existing tracking code...
+                    
+
+
+
+
 
         # Process next frame
         img_id += 1

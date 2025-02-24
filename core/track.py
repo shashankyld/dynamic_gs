@@ -53,6 +53,47 @@ class Tracker:
             
         return True
 
+    def extract_matches(self, frame1: Frame, frame2: Frame) -> Optional[np.ndarray]:
+        """Extract and match features between two frames."""
+        if frame1.image is None or frame2.image is None:
+            return None
+            
+        with torch.no_grad():
+            # Convert images to tensors
+            img1 = convert_image_to_tensor(frame1.image).unsqueeze(0).to(self.device)
+            img2 = convert_image_to_tensor(frame2.image).unsqueeze(0).to(self.device)
+            
+            # Extract features
+            feat1 = self.extractor.extract(img1)
+            feat2 = self.extractor.extract(img2)
+            
+            # Match features
+            matches_out = self.matcher({"image0": feat1, "image1": feat2})
+            
+            # Remove batch dimension
+            feats1, feats2, matches01 = [rbd(x) for x in [feat1, feat2, matches_out]]
+            
+            # Get keypoints and matches
+            kpts1 = feats1["keypoints"]
+            kpts2 = feats2["keypoints"]
+            matches = matches01["matches"]
+            
+            # Store keypoints in frames
+            frame1.keypoints = kpts1.cpu().numpy()
+            frame2.keypoints = kpts2.cpu().numpy()
+            
+            # Return matches as numpy array
+            return matches.cpu().numpy()
+            
+    def match_frames(self, frame1: Frame, frame2: Frame) -> Optional[np.ndarray]:
+        """High-level matching function that ensures keypoints exist."""
+        # Extract features if not already present
+        if not self.extract_features(frame1) or not self.extract_features(frame2):
+            return None
+            
+        # Extract and return matches
+        return self.extract_matches(frame1, frame2)
+
     def track_frames(self, frame1: Frame, frame2: Frame) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Track frame2 relative to frame1 using feature matching and PnP."""
         # Check for required data
