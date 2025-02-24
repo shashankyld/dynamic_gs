@@ -1,5 +1,5 @@
 from core.map import Map
-from utilities.utils_draw import visualize_global_map
+from utilities.utils_draw import visualize_global_map, visualize_local_map
 
 if __name__ == '__main__':
     map_path = "/home/shashank/Documents/UniBonn/thesis/GS/dynamic_gs/logs/slam_map/20250224_134722/map.pkl"
@@ -19,5 +19,9 @@ if __name__ == '__main__':
         visualize_global_map(loaded_map, 
                              title="Loaded Map Visualization",
                              dense=True)
+        visualize_local_map(loaded_map,
+                            title="Loaded Local Map Visualization",
+                            dense=True)
+        
     except Exception as e:
         print(f"Error loading map: {e}")

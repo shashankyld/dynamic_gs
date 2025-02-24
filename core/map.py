@@ -4,6 +4,7 @@ from core.keyframe import Keyframe
 import pickle
 import os
 from datetime import datetime
+from scipy.spatial import cKDTree
 
 class MapPoint:
     """3D point in the map with observation info."""
@@ -30,10 +31,52 @@ class Map:
         self.local_keyframes: List[int] = []  # Ordered list of recent keyframe IDs
         self.local_window_size = local_window_size
         self.next_point_id = 0
+        self.kdtree = None
+        self.descriptor_distance_threshold = 0.7  # Descriptor similarity threshold
+        self.spatial_distance_threshold = 0.1     # 10cm in 3D space
+        self.max_descriptor_candidates = 10       # Maximum number of candidates to check
         
+    def find_matching_point(self, position: np.ndarray, descriptor: np.ndarray) -> Optional[int]:
+        """Find existing map point that matches given position and descriptor."""
+        if len(self.map_points) == 0:
+            return None
+            
+        # Update KD-tree if needed
+        if self.kdtree is None:
+            positions = np.array([p.position for p in self.map_points.values()])
+            self.kdtree = cKDTree(positions)
+            
+        # Find nearest neighbors within spatial threshold
+        distances, indices = self.kdtree.query(position, 
+                                             k=min(self.max_descriptor_candidates, len(self.map_points)),
+                                             distance_upper_bound=self.spatial_distance_threshold)
+        
+        if isinstance(distances, float):  # Single result
+            distances, indices = [distances], [indices]
+            
+        # Check descriptor similarity for nearby points
+        best_match = None
+        best_similarity = float('inf')
+        
+        for dist, idx in zip(distances, indices):
+            if dist == float('inf'):
+                continue
+                
+            point_id = list(self.map_points.keys())[idx]
+            map_point = self.map_points[point_id]
+            
+            if map_point.descriptor is not None and descriptor is not None:
+                similarity = np.linalg.norm(map_point.descriptor - descriptor)
+                if similarity < self.descriptor_distance_threshold and similarity < best_similarity:
+                    best_similarity = similarity
+                    best_match = point_id
+                    
+        return best_match
+
     def add_keyframe(self, keyframe: Keyframe):
         """Add new keyframe and its points to map, respecting dynamic mask."""
         self.keyframes[keyframe.id] = keyframe
+        self.kdtree = None  # Invalidate KD-tree
         
         # Update local keyframes window
         self.local_keyframes.append(keyframe.id)
@@ -41,32 +84,44 @@ class Map:
             old_kf_id = self.local_keyframes.pop(0)
             self._remove_from_local_map(old_kf_id)
             
-        # Add keyframe's points to map
-        print("Keyframe.keypoints", keyframe.keypoints)
-        print("Keyframe.depth", keyframe.depth)
         if keyframe.keypoints is not None and keyframe.depth is not None:
             points_3d = self._backproject_keypoints(keyframe)
-            print(f"Adding {len(points_3d)} points from keyframe {keyframe.id}")
+            print(f"Processing {len(points_3d)} points from keyframe {keyframe.id}")
+            
+            new_points_added = 0
+            points_matched = 0
+            
             for idx, (point_3d, kp) in enumerate(zip(points_3d, keyframe.keypoints)):
                 if point_3d is not None:
-                    # Check dynamic mask if it exists
+                    # Check dynamic mask
                     x, y = int(round(kp[0])), int(round(kp[1]))
-                    if keyframe.dynamic_mask is not None:
-                        if not self._is_point_static(x, y, keyframe.dynamic_mask):
-                            continue  # Skip dynamic points
+                    if keyframe.dynamic_mask is not None and not self._is_point_static(x, y, keyframe.dynamic_mask):
+                        continue
                     
                     # Transform to world coordinates
                     if keyframe.pose is not None:
                         point_3d = (keyframe.pose @ np.append(point_3d, 1))[:3]
                     
-                    # Create map point
-                    point_id = self.add_point(
-                        position=point_3d,
-                        observing_keyframe=keyframe,
-                        descriptor=keyframe.descriptors[idx] if keyframe.descriptors is not None else None
-                    )
-                    keyframe.visible_map_points.add(point_id)
+                    descriptor = keyframe.descriptors[idx] if keyframe.descriptors is not None else None
                     
+                    # Try to find matching existing point
+                    matching_point_id = self.find_matching_point(point_3d, descriptor)
+                    
+                    if matching_point_id is not None:
+                        # Update existing point
+                        self.map_points[matching_point_id].observing_keyframes.add(keyframe.id)
+                        if descriptor is not None:
+                            self.map_points[matching_point_id].update_descriptor(descriptor)
+                        keyframe.visible_map_points.add(matching_point_id)
+                        points_matched += 1
+                    else:
+                        # Add new point
+                        point_id = self.add_point(point_3d, keyframe, descriptor)
+                        keyframe.visible_map_points.add(point_id)
+                        new_points_added += 1
+            
+            print(f"Added {new_points_added} new points, matched {points_matched} existing points")
+            
         self.update_local_points()
 
     def _is_point_static(self, x: int, y: int, mask: np.ndarray) -> bool:

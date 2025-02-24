@@ -651,3 +651,94 @@ def visualize_global_map(map_obj, title="Global Map Visualization", dense=False)
     
     vis.run()
     vis.destroy_window()
+
+def visualize_local_map(map_obj, title="Local Map Visualization", dense=False):
+    """
+    Visualize only the local window of the SLAM map.
+    
+    Args:
+        map_obj: Map object containing keyframes and map points
+        title: Window title
+        dense: If True, shows dense reconstruction from RGBD frames
+    """
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(window_name=title)
+    
+    # Add coordinate frame for world origin
+    world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+    vis.add_geometry(world_frame)
+    
+    # Add only local keyframe poses and optionally dense point clouds
+    for kf_id in map_obj.local_keyframes:
+        keyframe = map_obj.keyframes[kf_id]
+        if keyframe.pose is not None:
+            # Add keyframe coordinate in yellow for local frames
+            frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
+            frame.transform(np.linalg.inv(keyframe.pose))
+            # Paint the coordinate frame yellow to distinguish local keyframes
+            frame.paint_uniform_color([1, 1, 0])  # Yellow color
+            vis.add_geometry(frame)
+            
+            # Add dense point cloud if requested
+            if dense and keyframe.depth is not None and keyframe.image is not None:
+                points_obj = depth2pointcloud(
+                    keyframe.depth, keyframe.image,
+                    keyframe.fx, keyframe.fy, keyframe.cx, keyframe.cy,
+                    max_depth=10.0, min_depth=0.1
+                )
+                
+                # Create Open3D point cloud for local frame
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(np.asarray(points_obj.points))
+                pcd.colors = o3d.utility.Vector3dVector(np.asarray(points_obj.colors))
+                
+                # Transform to world coordinates
+                pcd.transform(np.linalg.inv(keyframe.pose))
+                
+                # Downsample
+                pcd = pcd.voxel_down_sample(voxel_size=0.02)
+                vis.add_geometry(pcd)
+    
+    # Add only local map points
+    if map_obj.local_map_points and not dense:
+        local_points = []
+        for point_id in map_obj.local_map_points:
+            if point_id in map_obj.map_points:
+                local_points.append(map_obj.map_points[point_id].position)
+        
+        if local_points:
+            local_pcd = o3d.geometry.PointCloud()
+            local_pcd.points = o3d.utility.Vector3dVector(np.array(local_points))
+            local_pcd.paint_uniform_color([0, 1, 1])  # Cyan points for local map
+            vis.add_geometry(local_pcd)
+    
+    # Add local trajectory
+    if len(map_obj.local_keyframes) > 1:
+        trajectory = o3d.geometry.LineSet()
+        points = []
+        for kf_id in map_obj.local_keyframes:
+            if map_obj.keyframes[kf_id].pose is not None:
+                points.append(np.linalg.inv(map_obj.keyframes[kf_id].pose)[:3, 3])
+        
+        if points:
+            lines = [[i, i+1] for i in range(len(points)-1)]
+            trajectory.points = o3d.utility.Vector3dVector(points)
+            trajectory.lines = o3d.utility.Vector2iVector(lines)
+            trajectory.paint_uniform_color([1, 1, 0])  # Yellow trajectory for local window
+            vis.add_geometry(trajectory)
+    
+    # Setup visualization
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([0, 0, 0])
+    opt.point_size = 3.0  # Slightly larger points for better visibility
+    
+    # Set camera view
+    view_control = vis.get_view_control()
+    view_control.set_zoom(0.9)  # Closer zoom for local map
+    view_control.set_front([-0.5, -0.5, -0.5])
+    view_control.set_up([0, -1, 0])
+    
+    vis.run()
+    vis.destroy_window()
+
+
