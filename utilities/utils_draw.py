@@ -23,8 +23,9 @@ import cv2
 import torch
 import random
 import string
+import open3d as o3d
 from utilities.utils_delaunay import draw_simplicies_on_image
-
+from utilities.utils_depth import depth2pointcloud
 
 # draw a list of points with different random colors on a input image 
 def draw_points(img, pts, radius=5): 
@@ -566,3 +567,87 @@ def create_histogram_image(data, num_bins=50, value_range=(-20, 20), width=640, 
                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2)
     
     return img
+
+
+def visualize_global_map(map_obj, title="Global Map Visualization", dense=False):
+    """
+    Visualize the complete SLAM map.
+    
+    Args:
+        map_obj: Map object containing keyframes and map points
+        title: Window title
+        dense: If True, shows dense reconstruction from RGBD frames
+    """
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(window_name=title)
+    
+    # Add coordinate frame for world origin
+    world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+    vis.add_geometry(world_frame)
+    
+    # Add keyframe poses and optionally dense point clouds
+    for kf_id, keyframe in map_obj.keyframes.items():
+        if keyframe.pose is not None:
+            # Add keyframe coordinate
+            frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
+            frame.transform(keyframe.pose)
+            vis.add_geometry(frame)
+            
+            # Add dense point cloud if requested
+            if dense and keyframe.depth is not None and keyframe.image is not None:
+                # Use existing depth2pointcloud function
+                points_obj = depth2pointcloud(
+                    keyframe.depth, keyframe.image,
+                    keyframe.fx, keyframe.fy, keyframe.cx, keyframe.cy,
+                    max_depth=10.0, min_depth=0.1
+                )
+                
+                # Convert points and colors to numpy arrays
+                points = np.asarray(points_obj.points, dtype=np.float64)
+                colors = np.asarray(points_obj.colors, dtype=np.float64)
+                
+                # Create Open3D point cloud
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(points)
+                pcd.colors = o3d.utility.Vector3dVector(colors)
+                
+                # Transform to world coordinates
+                pcd.transform(np.linalg.inv(keyframe.pose))
+                                              
+                # Downsample to manage density
+                pcd = pcd.voxel_down_sample(voxel_size=0.02)
+                
+                vis.add_geometry(pcd)
+    
+    # Add sparse map points
+    if map_obj.map_points and not dense:  # Show sparse points only if not in dense mode
+        points = np.array([point.position for point in map_obj.map_points.values()], dtype=np.float64)
+        map_pcd = o3d.geometry.PointCloud()
+        map_pcd.points = o3d.utility.Vector3dVector(points)
+        map_pcd.paint_uniform_color([0, 1, 0])  # Green points
+        vis.add_geometry(map_pcd)
+    
+    # Add trajectory
+    if len(map_obj.keyframes) > 1:
+        trajectory = o3d.geometry.LineSet()
+        points = [kf.pose[:3, 3] for kf in map_obj.keyframes.values() if kf.pose is not None]
+        lines = [[i, i+1] for i in range(len(points)-1)]
+        if points:
+            trajectory.points = o3d.utility.Vector3dVector(points)
+            trajectory.lines = o3d.utility.Vector2iVector(lines)
+            trajectory.paint_uniform_color([1, 0, 0])  # Red trajectory
+            vis.add_geometry(trajectory)
+    
+    # Setup visualization
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([0, 0, 0])
+    opt.point_size = 2.0
+    
+    # Set camera view
+    view_control = vis.get_view_control()
+    view_control.set_zoom(0.7)
+    view_control.set_front([-0.5, -0.5, -0.5])
+    view_control.set_up([0, -1, 0])
+    
+    vis.run()
+    vis.destroy_window()

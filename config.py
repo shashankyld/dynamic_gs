@@ -59,6 +59,14 @@ class Config(object):
         self.NumFramesAway = slam_parameters.SlamParameters.kNumFramesAway
         self.num_features_to_extract = slam_parameters.SlamParameters.kNumFeatures
         self.ShowDebugImages = slam_parameters.SlamParameters.kShowDebugImages
+        self.MIN_DISTANCE_BETWEEN_KEYFRAMES = slam_parameters.SlamParameters.MIN_DISTANCE_BETWEEN_KEYFRAMES
+        self.MIN_ROTATION_BETWEEN_KEYFRAMES = slam_parameters.SlamParameters.MIN_ROTATION_BETWEEN_KEYFRAMES
+        self.MAX_FRAMES_BETWEEN_KEYFRAMES = slam_parameters.SlamParameters.MAX_FRAMES_BETWEEN_KEYFRAMES
+        self.MIN_INLIER_THRESHOLD = slam_parameters.SlamParameters.MIN_INLIER_THRESHOLD
+        self.MIN_KEYFRAME_MATCHES = slam_parameters.SlamParameters.MIN_KEYFRAME_MATCHES
+        self.NUM_LOCAL_KEYFRAMES = slam_parameters.SlamParameters.NUM_LOCAL_KEYFRAMES
+        self.NUM_FEATURES = slam_parameters.SlamParameters.NUM_FEATURES
+        
         self.get_dataset_settings()
         self.get_cam_settings()
         self.get_feature_manager_settings()
