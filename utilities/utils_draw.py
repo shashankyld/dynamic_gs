@@ -257,18 +257,24 @@ def visualize_matches(img0, img1, kpts0, kpts1, matches, color=(0, 255, 0), thic
     kpts1 = kpts1.astype(int)
     
     # Draw matches
+    count = 0
     for i, j in matches:
-        pt0 = tuple(kpts0[i])  # First image coordinates
-        pt1 = tuple(kpts1[j] + np.array([w0, 0]))  # Second image, offset by width of first image
+        if count % 50 == 0 or True:
+            print(f"Drawing match {count}")
+            pt0 = tuple(kpts0[i])  # First image coordinates
+            pt1 = tuple(kpts1[j] + np.array([w0, 0]))  # Second image, offset by width of first image
 
-        cv2.circle(output_img, pt0, radius, color, thickness)
-        cv2.circle(output_img, pt1, radius, color, thickness)
-        cv2.line(output_img, pt0, pt1, color, thickness)
+            cv2.circle(output_img, pt0, radius, color, thickness)
+            cv2.circle(output_img, pt1, radius, color, thickness)
+            cv2.line(output_img, pt0, pt1, color, thickness)
 
-        if add_text:
-            # Add text to the key points, more parameters can be added to make them look better.
-            cv2.putText(output_img, str(i), pt0, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt0
-            cv2.putText(output_img, str(j), pt1, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt
+            if add_text:
+                # Add text to the key points, more parameters can be added to make them look better.
+                cv2.putText(output_img, str(i), pt0, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt0
+                cv2.putText(output_img, str(j), pt1, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)  # Add text to pt
+            
+        count += 1
+        
 
     return output_img
 
