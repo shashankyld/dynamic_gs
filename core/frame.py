@@ -90,6 +90,9 @@ class Frame:
         # Visibility information
         self.visible_map_points = set()  # Map points visible in this frame
         
+        # Add Delaunay triangulation storage
+        self._delaunay = None  # Will store networkx Graph object
+        
     def set_features(self, keypoints: np.ndarray, descriptors: np.ndarray):
         """Set feature keypoints and descriptors"""
         self.keypoints = keypoints
@@ -198,3 +201,4 @@ class Frame:
     @property
     def dynamic_mask(self) -> Optional[np.ndarray]:
         return self._dynamic_mask
+        

@@ -132,6 +132,9 @@ if __name__ == "__main__":
                     Delaunay_G = delaunay_triangulation(curr_frame)
                     Delaunay_img = draw_delaunay_triangulation(Delaunay_G, curr_frame)
                     
+                    # Store Delaunay triangulation in frame
+                    curr_frame.delaunay = Delaunay_G
+
                     prev_delaunay_id = starting_img_id
 
 
@@ -155,10 +158,6 @@ if __name__ == "__main__":
                     tracked_poses[img_id] = curr_frame.pose
 
 
-                    ## CHECK IF DELAUNAY TRIANGULATION SHOULD BE CREATED
-                    # For now create for all frames
-                    Delaunay_G = delaunay_triangulation(curr_frame)
-                    Delaunay_img = draw_delaunay_triangulation(Delaunay_G, curr_frame)
 
                     # Find the neared frame KF that has delaunay, use its delaunay edges for comparisons.
                     prev_delaunay_id = slam.map.local_keyframes[-1]
@@ -166,10 +165,12 @@ if __name__ == "__main__":
                     print("Prev Delaunay ID: ", prev_delaunay_id)
 
                     if img_id - starting_img_id > kNumFramesAway:
-                        # Compare delaunay between the curr_frame and frame that is kNumFramesAway only with common edges from the prev_delaunay
-                        common_matches = matches_with_k_frames_away_with_prev_delaunay_edges(curr_frame, slam, kNumFramesAway)
-                
-
+                        # Compare delaunay between frames
+                        matches_curr_prev, matches_curr_k, matches_prev_k, common_matches = \
+                            matches_with_k_frames_away_with_prev_delaunay_edges(curr_frame, slam, kNumFramesAway)
+                            
+                        G_all_frames(curr_frame=curr_frame, slam=slam)
+                        
 
                     prev_frame = curr_frame 
 

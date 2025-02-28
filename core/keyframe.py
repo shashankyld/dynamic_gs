@@ -7,6 +7,7 @@ class Keyframe(Frame):
     def __init__(self, frame: Frame):
         super().__init__(frame.id, frame.timestamp, frame.image, frame.depth)
         self.__dict__.update(frame.__dict__)  # Copy all frame attributes
+        self._delaunay = frame._delaunay  # Copy Delaunay from frame
         
         # Additional Keyframe-specific attributes
         self.local_gaussians: List[int] = []  # Indices of associated gaussians
@@ -16,6 +17,16 @@ class Keyframe(Frame):
         # Factor graph related
         self.pose_key = gtsam.symbol('x', self.id)
         self.factors: List[gtsam.NonlinearFactor] = []
+
+    @property
+    def delaunay(self):
+        """Get Delaunay triangulation graph."""
+        return self._delaunay
+        
+    @delaunay.setter
+    def delaunay(self, G):
+        """Store Delaunay triangulation graph."""
+        self._delaunay = G
         
     def add_odometry_factor(self, prev_keyframe, 
                            noise_model: gtsam.noiseModel.Base = None):

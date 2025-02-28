@@ -10,6 +10,7 @@ import time
 from slam_parameters import SlamParameters
 import math
 from core.posegraph import PoseGraph
+from utilities.utils_delaunay import delaunay_triangulation
 
 class SLAMSystem:
     """Core SLAM system managing tracking, mapping and frame management."""
@@ -64,6 +65,9 @@ class SLAMSystem:
         frame.pose = np.eye(4)
         # Convert first frame to keyframe
         keyframe = Keyframe(frame)
+        ## ADD DELAUNAY TRIANGULATION
+        delaunay_graph = delaunay_triangulation(keyframe)
+        keyframe._delaunay = delaunay_graph
         
         # Add to map
         self.map.add_keyframe(keyframe)
@@ -239,6 +243,11 @@ class SLAMSystem:
     def _create_keyframe(self, frame: Frame) -> Keyframe:
         """Convert frame to keyframe and reset motion counters."""
         keyframe = Keyframe(frame)
+        
+        # Create and store Delaunay triangulation
+        delaunay_graph = delaunay_triangulation(keyframe)
+        keyframe._delaunay = delaunay_graph
+        
         self.map.add_keyframe(keyframe)
         self.last_keyframe = keyframe
         

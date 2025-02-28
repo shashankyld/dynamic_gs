@@ -196,7 +196,7 @@ def draw_matches_with_last_dealunay(G, frame, frame_with_last_dealunay):
     return vis_img
 
 def matches_with_k_frames_away_with_prev_delaunay_edges(frame, slam, k):
-    """Visualize three frames showing only common keypoints matched across all three in green.
+    """Find and visualize common keypoints matched across current frame, last keyframe, and k-frames-away frame.
     
     Args:
         frame: Current frame
@@ -204,7 +204,12 @@ def matches_with_k_frames_away_with_prev_delaunay_edges(frame, slam, k):
         k: Number of frames to look back
     
     Returns:
-        vis_img: Visualization image showing three frames side by side with only common keypoints
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: 
+            - matches_curr_prev: Matches between current frame and last keyframe (curr_idx, prev_idx)
+            - matches_curr_k: Matches between current frame and k-frames-away frame (curr_idx, k_idx)
+            - matches_prev_k: Matches between last keyframe and k-frames-away frame (prev_idx, k_idx)
+            - common_matches: Array of common matches across all three frames 
+                             (curr_idx, prev_idx, k_idx)
     """
     # Get the frames
     frame = frame
@@ -213,7 +218,7 @@ def matches_with_k_frames_away_with_prev_delaunay_edges(frame, slam, k):
     except IndexError:
         print(slam.map.keyframes)
         print("No keyframes in map")
-        return None
+        return None, None, None, None
     frame_k_frames_away = get_frame_from_pyslam_dataloader(slam.dataset, slam.groundtruth, frame.id - k, slam.config)
 
     # Get matches between frames using the tracker
@@ -261,37 +266,59 @@ def matches_with_k_frames_away_with_prev_delaunay_edges(frame, slam, k):
     prev_k_dict = dict(matches_prev_k)        # prev_idx -> k_idx
 
     # Find keypoints common across all three frames
-    common_curr_indices = set()
+    common_matches = []
     for curr_idx, prev_idx in curr_prev_dict.items():
         if curr_idx in curr_k_dict:  # Matches with k-frame
             k_idx = curr_k_dict[curr_idx]
             if prev_idx in prev_k_dict and prev_k_dict[prev_idx] == k_idx:  # Consistent triangle
-                common_curr_indices.add(curr_idx)
+                common_matches.append([curr_idx, prev_idx, k_idx])
+
+    common_matches = np.array(common_matches, dtype=np.int32)
 
     # Draw only common keypoints
     # Current frame (left)
     for i, kp in enumerate(frame.keypoints):
-        if i in common_curr_indices:
+        if i in common_matches[:, 0]:
             draw_keypoint(vis_img, kp, GREEN)
 
     # Previous keyframe (middle)
     for i, kp in enumerate(frame_with_last_delaunay.keypoints):
-        if i in [curr_prev_dict[curr_idx] for curr_idx in common_curr_indices]:
+        if i in common_matches[:, 1]:
             draw_keypoint(vis_img, kp, GREEN, w1)
 
     # K-frames-away frame (right)
     for i, kp in enumerate(frame_k_frames_away.keypoints):
-        if i in [curr_k_dict[curr_idx] for curr_idx in common_curr_indices]:
+        if i in common_matches[:, 2]:
             draw_keypoint(vis_img, kp, GREEN, w1+w2)
 
     # Add text labels
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(vis_img, f'Current Frame (id:{frame.id})', (10, 30), font, 1, (255,255,255), 2)
-    cv2.putText(vis_img, f'Last Keyframe (id:{frame_with_last_delaunay.id})', (w1+10, 30), font, 1, (255,255,255), 2)
-    cv2.putText(vis_img, f'K-Frame Away (id:{frame_k_frames_away.id})', (w1+w2+10, 30), font, 1, (255,255,255), 2)
+    cv2.putText(vis_img, f'Current Frame (id:{frame.id})', (10, 30), font, 1, (255,0,0), 2)
+    cv2.putText(vis_img, f'Last Keyframe (id:{frame_with_last_delaunay.id})', (w1+10, 30), font, 1, (255,0,0), 2)
+    cv2.putText(vis_img, f'K-Frame Away (id:{frame_k_frames_away.id})', (w1+w2+10, 30), font, 1, (255,0,0), 2)
+
+    ## ADD TEXT TO SHOW NUMBER OF COMMON POINTS
+    cv2.putText(vis_img, f'Common Points: {len(common_matches)}', (10, 60), font, 1, (0,0,255), 2)
+    
 
     # Show visualization
     cv2.imshow("Common Keypoints Visualization", vis_img)
     cv2.waitKey(1)
 
-    return vis_img
+    # Return all matches and common matches
+    return matches_curr_prev, matches_curr_k, matches_prev_k, common_matches
+
+
+def G_all_frames(curr_frame, slam):
+    """ 
+    """
+    curr_frame = curr_frame
+    prev_delaunay_frame = slam.map.get_last_keyframe()
+    print("Prev Delaunay Frame: ", prev_delaunay_frame.id)
+    compare_frame = get_frame_from_pyslam_dataloader(slam.dataset, slam.groundtruth, curr_frame.id - slam.config.NumFramesAway, slam.config)
+    matches_curr_prev, matches_curr_k, matches_prev_k, common_matches = \
+                            matches_with_k_frames_away_with_prev_delaunay_edges(curr_frame, slam, slam.config.NumFramesAway)
+    
+    # GET G FOR THE KEYFRAME
+    G = prev_delaunay_frame.delaunay
+    print("G: ", G) 
