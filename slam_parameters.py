@@ -7,7 +7,7 @@ class SlamParameters:
     kShowDebugImages = True
 
     # Dynamic SLAM
-    kNumFramesAway = 10
+    kNumFramesAway = 5
 
     # STARTING AND ENDING FRAME
     kStartingFrameIdx = 0
