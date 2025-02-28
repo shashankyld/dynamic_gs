@@ -65,6 +65,7 @@ class SLAMSystem:
         self.last_keyframe = keyframe
         self.local_keyframes.append(keyframe)
         
+        self.prev_frame = frame
         self.initialized = True
         return True
         

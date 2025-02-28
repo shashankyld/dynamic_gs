@@ -10,6 +10,11 @@ import torch
 import numpy as np
 import open3d as o3d
 from utilities.utils_draw import draw_torch_image
+from utilities.dataset_bridge import get_frame_from_pyslam_dataloader
+from utilities.utils_edges import (find_matching_edges, find_dynamic_edges, 
+                                 find_connected_components, create_dynamic_mask,
+                                 visualize_edges, visualize_dynamic_components, EdgeTracker)
+from core.slam_system import SLAMSystem as SLAM
 
 if __name__ == "__main__":
     # SETTING UP DATASET PARAMS
@@ -18,17 +23,26 @@ if __name__ == "__main__":
     depthmapfactor = config.cam_settings["DepthMapFactor"]
     depth_scale = 1/depthmapfactor
 
+    # Camera matrix (intrinsics)
+    camera_matrix = np.array([
+        [config.cam_settings["Camera.fx"], 0, config.cam_settings["Camera.cx"]],
+        [0, config.cam_settings["Camera.fy"], config.cam_settings["Camera.cy"]],
+        [0, 0, 1]
+    ], dtype=np.float64)
+
     # GT DATA
     groundtruth = groundtruth_factory(config.dataset_settings)
     
     # PIPELINE DEVICE
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    
     # SETTING UP SLAM PARAMETERS
     num_features = config.num_features_to_extract if config.num_features_to_extract > 0 else 5000
     kNumFramesAway = config.NumFramesAway
-    
+    kNumLocalKFs = config.NUM_LOCAL_KEYFRAMES
+
     # Feature extraction and matching setup
+    slam = SLAM(camera_matrix, num_features, num_local_keyframes=kNumLocalKFs, device=device)
     extractor = SuperPoint(max_num_keypoints=num_features).eval().to(device)
     matcher = LightGlue(features="superpoint").eval().to(device)
 
@@ -75,7 +89,7 @@ if __name__ == "__main__":
                 img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
                 
                 # Get pose from groundtruth if available
-                timestamp, global_poses[img_id] = groundtruth.getTimestampPoseMatrix(img_id)
+                timestamp, global_poses[img_id] = groundtruth.getTimestampPoseMatrix(img_id, set_id_to_eye4=starting_img_id)
 
                 # Transform point cloud to global coordinates 
                 point_cloud.transform(global_poses[img_id])
@@ -90,10 +104,44 @@ if __name__ == "__main__":
                 draw_torch_image(img_tensor)
                 cv2.waitKey(1)
 
+                if img_id == starting_img_id: 
+                    print("Initializing SLAM")
+                    print("Processing frame: ", img_id)
+                    curr_frame = get_frame_from_pyslam_dataloader(dataset, groundtruth, img_id, config)
+                    slam.initialize(curr_frame)
+                    print("Initialized SLAM")
+                    print("SLAM: ", slam)
+                    print("Tracker: ", slam.tracker)
+                    print("Map: ", slam.map)
+                    # Print Current Frame 
+                    print("Current Frame: ", curr_frame)
+                    print("Current Frame Pose: ", curr_frame.pose)
+                    print("GT Pose: ", global_poses[img_id])
+
+                    prev_frame = curr_frame
+
+                else:
+                    print("Processing frame: ", img_id)
+                    curr_frame = get_frame_from_pyslam_dataloader(dataset, groundtruth, img_id, config)
+                    
+                    dynamic_mask = None
+                    curr_frame._dynamic_mask = dynamic_mask
+
+                    # Track features
+                    print("Tracking frame, ", img_id)
+                    tracking_result = slam.track_frame(curr_frame)
+                    print("Tracking Result: ", tracking_result)
+
+
+
         # Process next frame
         img_id += 1
-        
+
+
         if img_id > ending_img_id:
+            
+            exit(0)
+        
             print("Reached end frame ID")
             # Visualize accumulated point clouds
             pcd_list = []
