@@ -11,7 +11,7 @@ class SlamParameters:
 
     # STARTING AND ENDING FRAME
     kStartingFrameIdx = 0
-    kEndingFrameIdx = 100
+    kEndingFrameIdx = 50
 
     # Keyframe creation parameters
     MIN_DISTANCE_BETWEEN_KEYFRAMES = 1  # meters
