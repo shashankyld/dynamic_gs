@@ -24,7 +24,7 @@ import torch
 import random
 import string
 import open3d as o3d
-from utilities.utils_delaunay import draw_simplicies_on_image
+# from utilities.utils_delaunay import draw_simplicies_on_image
 from utilities.utils_depth import depth2pointcloud
 
 # draw a list of points with different random colors on a input image 

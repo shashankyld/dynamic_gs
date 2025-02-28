@@ -277,6 +277,33 @@ class Tracker:
         T = np.linalg.inv(T)
         return T, inliers
 
+    def match_frames(self, frame1: Frame, frame2: Frame) -> np.ndarray:
+        """Get matches between two frames without computing pose."""
+        # Check for required data
+        if not self.extract_features(frame1) or not self.extract_features(frame2):
+            print("[Tracker] Missing features")
+            return None
+
+        with torch.no_grad():
+            # Convert images to tensors
+            img1 = convert_image_to_tensor(frame1.image).unsqueeze(0).to(self.device)
+            img2 = convert_image_to_tensor(frame2.image).unsqueeze(0).to(self.device)
+            
+            # Extract and match features
+            feat1 = self.extractor.extract(img1)
+            feat2 = self.extractor.extract(img2)
+            matches_out = self.matcher({"image0": feat1, "image1": feat2})
+            
+            # Get keypoints and matches
+            feats1, feats2 = [rbd(x) for x in [feat1, feat2]]
+            matches = matches_out["matches"][0]
+
+        # Store keypoints in frames
+        frame1.keypoints = feats1["keypoints"].cpu().numpy()
+        frame2.keypoints = feats2["keypoints"].cpu().numpy()
+
+        return matches.cpu().numpy()
+
     def __str__(self) -> str:
         """Return human-readable tracker status."""
         status = []

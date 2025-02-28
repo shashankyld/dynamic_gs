@@ -236,6 +236,12 @@ class Map:
         self.next_point_id += 1
         return point_id
 
+    def get_last_keyframe(self) -> Optional[Keyframe]:
+        """Get last keyframe added to map."""
+        if self.local_keyframes:
+            return self.keyframes[self.local_keyframes[-1]]
+        return None
+    
     def __str__(self) -> str:
         """Enhanced string representation with local map info."""
         status = []

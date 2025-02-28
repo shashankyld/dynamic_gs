@@ -46,6 +46,11 @@ class SLAMSystem:
         
         # Add pose graph
         self.pose_graph = PoseGraph()
+
+        ## CONFIGS
+        self.dataset = None
+        self.groundtruth = None
+        self.config = None
         
     def initialize(self, frame: Frame) -> bool:
         """Initialize SLAM with first frame."""

@@ -16,6 +16,7 @@ from utilities.utils_edges import (find_matching_edges, find_dynamic_edges,
                                  visualize_edges, visualize_dynamic_components, EdgeTracker)
 from core.slam_system import SLAMSystem as SLAM
 from utilities.utils_metrics import estimate_error_R_T
+from utilities.utils_delaunay import *
 
 
 if __name__ == "__main__":
@@ -45,6 +46,12 @@ if __name__ == "__main__":
 
     # Feature extraction and matching setup
     slam = SLAM(camera_matrix, num_features, num_local_keyframes=kNumLocalKFs, device=device)
+
+    ## SETTING CONFIG TO SLAM OBJECT
+    slam.dataset = dataset  
+    slam.groundtruth = groundtruth
+    slam.config = config
+
     extractor = SuperPoint(max_num_keypoints=num_features).eval().to(device)
     matcher = LightGlue(features="superpoint").eval().to(device)
 
@@ -69,6 +76,7 @@ if __name__ == "__main__":
     global_poses = {}
     tracked_poses = {}
     accumulated_clouds = {}
+    
 
 
     while True: 
@@ -119,6 +127,14 @@ if __name__ == "__main__":
                     tracked_poses[img_id] = curr_frame.pose
 
 
+                    ## CHECK IF DELAUNAY TRIANGULATION SHOULD BE CREATED 
+                    # For first frame, yes 
+                    Delaunay_G = delaunay_triangulation(curr_frame)
+                    Delaunay_img = draw_delaunay_triangulation(Delaunay_G, curr_frame)
+                    
+                    prev_delaunay_id = starting_img_id
+
+
                     prev_frame = curr_frame
 
                 else:
@@ -137,6 +153,23 @@ if __name__ == "__main__":
                     print("GT Pose: ", global_poses[img_id])
 
                     tracked_poses[img_id] = curr_frame.pose
+
+
+                    ## CHECK IF DELAUNAY TRIANGULATION SHOULD BE CREATED
+                    # For now create for all frames
+                    Delaunay_G = delaunay_triangulation(curr_frame)
+                    Delaunay_img = draw_delaunay_triangulation(Delaunay_G, curr_frame)
+
+                    # Find the neared frame KF that has delaunay, use its delaunay edges for comparisons.
+                    prev_delaunay_id = slam.map.local_keyframes[-1]
+                    print("Current Frame ID: ", img_id)
+                    print("Prev Delaunay ID: ", prev_delaunay_id)
+
+                    if img_id - starting_img_id > kNumFramesAway:
+                        # Compare delaunay between the curr_frame and frame that is kNumFramesAway only with common edges from the prev_delaunay
+                        common_matches = matches_with_k_frames_away_with_prev_delaunay_edges(curr_frame, slam, kNumFramesAway)
+                
+
 
                     prev_frame = curr_frame 
 
@@ -160,6 +193,7 @@ if __name__ == "__main__":
 
 
         if img_id > ending_img_id:
+            exit(0)
 
             # Visualize GT poses and tracked poses
             poses_o3d = []
@@ -197,5 +231,14 @@ if __name__ == "__main__":
                     poses_o3d.append(axes)
 
             o3d.visualization.draw_geometries(pcd_list + poses_o3d)
+
+            print("SLAM: ", slam)   
+            print("Tracker: ", slam.tracker)
+            print("Map: ", slam.map)
+            # PRint number of keyframes and number of points in the map in global and local maps
+            print("Number of keyframes in global map: ", len(slam.map.keyframes))
+            print("Number of points in global map: ", len(slam.map.map_points))
+
+
 
             break
