@@ -15,6 +15,8 @@ from utilities.utils_edges import (find_matching_edges, find_dynamic_edges,
                                  find_connected_components, create_dynamic_mask,
                                  visualize_edges, visualize_dynamic_components, EdgeTracker)
 from core.slam_system import SLAMSystem as SLAM
+from utilities.utils_metrics import estimate_error_R_T
+
 
 if __name__ == "__main__":
     # SETTING UP DATASET PARAMS
@@ -65,6 +67,7 @@ if __name__ == "__main__":
     ending_img_id = config.end_frame_id
     img_id = starting_img_id
     global_poses = {}
+    tracked_poses = {}
     accumulated_clouds = {}
 
 
@@ -91,11 +94,6 @@ if __name__ == "__main__":
                 # Get pose from groundtruth if available
                 timestamp, global_poses[img_id] = groundtruth.getTimestampPoseMatrix(img_id, set_id_to_eye4=starting_img_id)
 
-                # Transform point cloud to global coordinates 
-                point_cloud.transform(global_poses[img_id])
-                # Store point cloud if valid
-
-                accumulated_clouds[img_id] = point_cloud
                 
                 
                 
@@ -118,6 +116,9 @@ if __name__ == "__main__":
                     print("Current Frame Pose: ", curr_frame.pose)
                     print("GT Pose: ", global_poses[img_id])
 
+                    tracked_poses[img_id] = curr_frame.pose
+
+
                     prev_frame = curr_frame
 
                 else:
@@ -131,7 +132,27 @@ if __name__ == "__main__":
                     print("Tracking frame, ", img_id)
                     tracking_result = slam.track_frame(curr_frame)
                     print("Tracking Result: ", tracking_result)
+                    print("Current Frame: ", curr_frame)
+                    print("Current Frame Pose: ", curr_frame.pose)
+                    print("GT Pose: ", global_poses[img_id])
 
+                    tracked_poses[img_id] = curr_frame.pose
+
+                    prev_frame = curr_frame 
+
+
+                # Print Relative Pose Error - curr_frame vs prev_frame (tracked vs ground truth) and curr_frame (tracked) vs ground truth
+                tracked_odometry = np.linalg.inv(prev_frame.pose) @ curr_frame.pose
+                gt_odometry = np.linalg.inv(global_poses[prev_frame.id]) @ global_poses[curr_frame.id]
+                print("Relative Odometry Error deg/m: ", estimate_error_R_T(tracked_odometry, gt_odometry))
+                print("Relative Pose Error deg/m: ", estimate_error_R_T(curr_frame.pose, global_poses[curr_frame.id]))
+                
+                # Transform point cloud to global coordinates 
+                # point_cloud.transform(global_poses[img_id])
+                point_cloud.transform(tracked_poses[img_id])
+                # Store point cloud if valid
+                accumulated_clouds[img_id] = point_cloud
+                
 
 
         # Process next frame
@@ -139,21 +160,42 @@ if __name__ == "__main__":
 
 
         if img_id > ending_img_id:
+
+            # Visualize GT poses and tracked poses
+            poses_o3d = []
+            for i in range(starting_img_id, ending_img_id + 1):
+                if i % 10 != 0: continue
+                else:
+                    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+                    axes.transform(global_poses[i])
+                    poses_o3d.append(axes)
+
+                    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+                    axes.transform(tracked_poses[i])
+                    poses_o3d.append(axes)
+
+            o3d.visualization.draw_geometries(poses_o3d)
             
-            exit(0)
+            
+            # exit(0)
         
             print("Reached end frame ID")
+            
+            
             # Visualize accumulated point clouds
             pcd_list = []
             poses_o3d = []
             
             for i in range(len(accumulated_clouds)):
-                #downsample
-                accumulated_clouds[i].voxel_down_sample(voxel_size=0.05)
-                pcd_list.append(accumulated_clouds[i])
-                axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
-                axes.transform(global_poses[i])
-                poses_o3d.append(axes)
+                if i % 10 != 0: continue
+                else:
+                    #downsample
+                    accumulated_clouds[i].voxel_down_sample(voxel_size=0.2)
+                    pcd_list.append(accumulated_clouds[i])
+                    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+                    axes.transform(global_poses[i])
+                    poses_o3d.append(axes)
 
             o3d.visualization.draw_geometries(pcd_list + poses_o3d)
+
             break
