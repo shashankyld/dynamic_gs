@@ -185,6 +185,11 @@ class GroundTruth(object):
         self.poses = np.array(self.poses, dtype=float)
         return self.trajectory, self.poses, self.timestamps    
     
+    def getTimestampPoseMatrix(self, frame_id):
+        """ Get the timestamp and the pose matrix for a given frame with correct scale and orientation """
+        timestamp, x, y, z, qx, qy, qz, qw, scale = self.getTimestampPoseAndAbsoluteScale(frame_id)
+        return timestamp, xyzq2Tmat(x, y, z, qx, qy, qz, qw)
+    
 
 # Read the ground truth from a simple file containining [timestamp, x,y,z, qx, qy, qz, qw, scale] lines
 # Use the file convert_groundtruth.py to convert a dataset into this format.
@@ -245,6 +250,12 @@ class SimpleGroundTruth(GroundTruth):
         else:
             abs_scale = np.sqrt((x - x_prev)*(x - x_prev) + (y - y_prev)*(y - y_prev) + (z - z_prev)*(z - z_prev))
         return timestamp, x,y,z, qx,qy,qz,qw, abs_scale     
+    
+    def getTimestampPoseMatrix(self, frame_id):
+        """ Get the timestamp and the pose matrix for a given frame with correct scale and orientation """
+        timestamp, x, y, z, qx, qy, qz, qw, scale = self.getTimestampPoseAndAbsoluteScale(frame_id)
+        return timestamp, xyzq2Tmat(x, y, z, qx, qy, qz, qw)
+    
 
 
 class KittiGroundTruth(GroundTruth):

@@ -18,6 +18,7 @@
 """
 
 import numpy as np
+import open3d as o3d
 
 
 # create a scaled image of uint8 from a image of floats 
@@ -52,6 +53,13 @@ def depth2pointcloud(depth, image, fx, fy, cx, cy, max_depth, min_depth=0.0):
     # colors corresponding to valid depth values
     colors = image[rows, cols] / 255.0
     return PointCloud(points, colors)
+
+def depth2pcd(depth, image, fx, fy, cx, cy, max_depth, min_depth=0.0):
+    pc = depth2pointcloud(depth, image, fx, fy, cx, cy, max_depth, min_depth)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pc.points)  
+    pcd.colors = o3d.utility.Vector3dVector(pc.colors)
+    return pcd
 
 def depth2pointcloud_v2(depth, image, fx, fy, cx, cy):
     width, height = depth.shape[0], depth.shape[1]
