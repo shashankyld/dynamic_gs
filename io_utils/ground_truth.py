@@ -185,19 +185,38 @@ class GroundTruth(object):
         self.poses = np.array(self.poses, dtype=float)
         return self.trajectory, self.poses, self.timestamps    
     
+    # def getTimestampPoseMatrix(self, frame_id, set_id_to_eye4=None):
+    #     """ Get the timestamp and the pose matrix for a given frame with correct scale and orientation """
+    #     timestamp, x, y, z, qx, qy, qz, qw, scale = self.getTimestampPoseAndAbsoluteScale(frame_id)
+    #     print("scale: ", scale)
+    #     if scale != 1:
+    #         print("scale is not 1")
+
+    #     # IF set_id_to_eye4 is not None, transform the pose matrix with inv of the pose matrix of that id 
+    #     if set_id_to_eye4 is not None:
+    #         T = self.getTimestampPoseMatrix(set_id_to_eye4)[1]
+    #         Tinv = np.linalg.inv(T)
+    #         T = np.matmul(Tinv, xyzq2Tmat(x, y, z, qx, qy, qz, qw))
+    #         return timestamp, T
+    
+    #     return timestamp, xyzq2Tmat(x, y, z, qx, qy, qz, qw)
+    
     def getTimestampPoseMatrix(self, frame_id, set_id_to_eye4=None):
         """ Get the timestamp and the pose matrix for a given frame with correct scale and orientation """
         timestamp, x, y, z, qx, qy, qz, qw, scale = self.getTimestampPoseAndAbsoluteScale(frame_id)
-
-        # IF set_id_to_eye4 is not None, transform the pose matrix with inv of the pose matrix of that id 
-        if set_id_to_eye4 is not None:
-            T = self.getTimestampPoseMatrix(set_id_to_eye4)[1]
-            Tinv = np.linalg.inv(T)
-            T = np.matmul(Tinv, xyzq2Tmat(x, y, z, qx, qy, qz, qw))
+        print("scale: ", scale)
+        if frame_id == set_id_to_eye4:
+            return timestamp, np.eye(4)
+        else: 
+            print("Starting Frame ID is : ", set_id_to_eye4)
+            id_start = set_id_to_eye4
+            _,x_start, y_start, z_start, qx_start, qy_start, qz_start, qw_start, _ = self.getTimestampPoseAndAbsoluteScale(id_start)
+            T_start = xyzq2Tmat(x_start, y_start, z_start, qx_start, qy_start, qz_start, qw_start)
+            
+            T = xyzq2Tmat(x, y, z, qx, qy, qz, qw)
+            T = np.matmul(np.linalg.inv(T_start), T)
             return timestamp, T
-    
-        return timestamp, xyzq2Tmat(x, y, z, qx, qy, qz, qw)
-    
+        
 
 # Read the ground truth from a simple file containining [timestamp, x,y,z, qx, qy, qz, qw, scale] lines
 # Use the file convert_groundtruth.py to convert a dataset into this format.

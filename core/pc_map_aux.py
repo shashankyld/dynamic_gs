@@ -12,9 +12,14 @@ class PC_Map():
     def get_pointcloud(self, img_id):
         return self.map[img_id]
     
-    def get_full_pointcloud(self, voxel_size=0.2):
+    def get_full_pointcloud(self, fraction = 0.5, voxel_size=0.2):
         pcd = o3d.geometry.PointCloud()
-        for key in self.map:
+        count = 0
+        length = len(self.map)
+        valid_counts = [i for i in range(length) if i % int(length * fraction) == 0]
+        for key in valid_counts:
+            count += 1
+            # Take only a fraction of the point clouds with even distribution
             pcd += self.map[key]
         pcd.voxel_down_sample(voxel_size=voxel_size)
         return pcd

@@ -57,12 +57,6 @@ if __name__ == "__main__":
     extractor = SuperPoint(max_num_keypoints=num_features).eval().to(device)
     matcher = LightGlue(features="superpoint").eval().to(device)
 
-    # Load groundtruth trajectory if available
-    if groundtruth is not None:
-        gt_traj3d, gt_poses, gt_timestamps = groundtruth.getFull6dTrajectory()
-        if gt_poses is None or len(gt_poses) == 0:
-            print("Error: No ground truth poses loaded!")
-            exit(1)
 
     """
     USAGE EXAMPLES:
@@ -102,6 +96,7 @@ if __name__ == "__main__":
                 img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
                 
                 # Get pose from groundtruth if available
+                print("Getting ground truth pose for frame: ", img_id)
                 timestamp, global_traj.trajectory[img_id] = groundtruth.getTimestampPoseMatrix(img_id, set_id_to_eye4=starting_img_id)
 
                 
@@ -185,9 +180,10 @@ if __name__ == "__main__":
                 print("Relative Pose Error deg/m: ", estimate_error_R_T(curr_frame.pose, global_traj.trajectory[curr_frame.id]))
                 
                 # Transform point cloud to global coordinates 
-                # point_cloud.transform(global_poses[img_id])
-                point_cloud.transform(local_traj.trajectory[img_id])
-                # Store point cloud if valid
+                point_cloud.transform(global_traj.trajectory[img_id])
+                # point_cloud.transform(local_traj.trajectory[img_id])
+                
+                # Store point cloud 
                 accumulated_pc.add(img_id, point_cloud)
                 
 
@@ -216,7 +212,9 @@ if __name__ == "__main__":
                     axes.paint_uniform_color([0, 0, 1])
                     poses_o3d.append(axes)
 
-            o3d.visualization.draw_geometries(poses_o3d)
+            origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
+            o3d.visualization.draw_geometries([origin] + poses_o3d)
+            
             
             
             # exit(0)
@@ -228,9 +226,9 @@ if __name__ == "__main__":
             poses_o3d = []
             
 
-            pcd_list = [accumulated_pc.get_full_pointcloud(voxel_size=0.5)]
+            pcd_list = [accumulated_pc.get_full_pointcloud(fraction = 0.1, voxel_size=0.2)]
 
-            o3d.visualization.draw_geometries(pcd_list + poses_o3d)
+            o3d.visualization.draw_geometries(pcd_list + poses_o3d + [origin])
 
             print("SLAM: ", slam)   
             print("Tracker: ", slam.tracker)
