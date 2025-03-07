@@ -17,6 +17,8 @@ from utilities.utils_edges import (find_matching_edges, find_dynamic_edges,
 from core.slam_system import SLAMSystem as SLAM
 from utilities.utils_metrics import estimate_error_R_T
 from utilities.utils_delaunay import *
+from core.trajectory_aux import Trajectory
+from core.pc_map_aux import PC_Map
 
 
 if __name__ == "__main__":
@@ -73,9 +75,9 @@ if __name__ == "__main__":
     starting_img_id = config.start_frame_id
     ending_img_id = config.end_frame_id
     img_id = starting_img_id
-    global_poses = {}
-    tracked_poses = {}
-    accumulated_clouds = {}
+    accumulated_pc = PC_Map()
+    global_traj = Trajectory()
+    local_traj = Trajectory()
     
 
 
@@ -100,7 +102,7 @@ if __name__ == "__main__":
                 img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
                 
                 # Get pose from groundtruth if available
-                timestamp, global_poses[img_id] = groundtruth.getTimestampPoseMatrix(img_id, set_id_to_eye4=starting_img_id)
+                timestamp, global_traj.trajectory[img_id] = groundtruth.getTimestampPoseMatrix(img_id, set_id_to_eye4=starting_img_id)
 
                 
                 
@@ -122,9 +124,9 @@ if __name__ == "__main__":
                     # Print Current Frame 
                     print("Current Frame: ", curr_frame)
                     print("Current Frame Pose: ", curr_frame.pose)
-                    print("GT Pose: ", global_poses[img_id])
+                    print("GT Pose: ", global_traj.trajectory[img_id])
 
-                    tracked_poses[img_id] = curr_frame.pose
+                    local_traj.trajectory[img_id] = curr_frame.pose
 
 
                     ## CHECK IF DELAUNAY TRIANGULATION SHOULD BE CREATED 
@@ -153,9 +155,9 @@ if __name__ == "__main__":
                     print("Tracking Result: ", tracking_result)
                     print("Current Frame: ", curr_frame)
                     print("Current Frame Pose: ", curr_frame.pose)
-                    print("GT Pose: ", global_poses[img_id])
+                    print("GT Pose: ", global_traj.trajectory[img_id])
 
-                    tracked_poses[img_id] = curr_frame.pose
+                    local_traj.trajectory[img_id] = curr_frame.pose
 
 
 
@@ -178,15 +180,15 @@ if __name__ == "__main__":
 
                 # Print Relative Pose Error - curr_frame vs prev_frame (tracked vs ground truth) and curr_frame (tracked) vs ground truth
                 tracked_odometry = np.linalg.inv(prev_frame.pose) @ curr_frame.pose
-                gt_odometry = np.linalg.inv(global_poses[prev_frame.id]) @ global_poses[curr_frame.id]
+                gt_odometry = np.linalg.inv(global_traj.trajectory[prev_frame.id]) @ global_traj.trajectory[curr_frame.id]
                 print("Relative Odometry Error deg/m: ", estimate_error_R_T(tracked_odometry, gt_odometry))
-                print("Relative Pose Error deg/m: ", estimate_error_R_T(curr_frame.pose, global_poses[curr_frame.id]))
+                print("Relative Pose Error deg/m: ", estimate_error_R_T(curr_frame.pose, global_traj.trajectory[curr_frame.id]))
                 
                 # Transform point cloud to global coordinates 
                 # point_cloud.transform(global_poses[img_id])
-                point_cloud.transform(tracked_poses[img_id])
+                point_cloud.transform(local_traj.trajectory[img_id])
                 # Store point cloud if valid
-                accumulated_clouds[img_id] = point_cloud
+                accumulated_pc.add(img_id, point_cloud)
                 
 
 
@@ -195,7 +197,7 @@ if __name__ == "__main__":
 
 
         if img_id > ending_img_id:
-            exit(0)
+            # exit(0)
 
             # Visualize GT poses and tracked poses
             poses_o3d = []
@@ -203,11 +205,15 @@ if __name__ == "__main__":
                 if i % 10 != 0: continue
                 else:
                     axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
-                    axes.transform(global_poses[i])
+                    axes.transform(global_traj.trajectory[i])
+                    # Color GT poses in green
+                    axes.paint_uniform_color([0, 1, 0])
                     poses_o3d.append(axes)
 
                     axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
-                    axes.transform(tracked_poses[i])
+                    axes.transform(local_traj.trajectory[i])
+                    # Color tracked poses in Blue
+                    axes.paint_uniform_color([0, 0, 1])
                     poses_o3d.append(axes)
 
             o3d.visualization.draw_geometries(poses_o3d)
@@ -219,18 +225,10 @@ if __name__ == "__main__":
             
             
             # Visualize accumulated point clouds
-            pcd_list = []
             poses_o3d = []
             
-            for i in range(len(accumulated_clouds)):
-                if i % 10 != 0: continue
-                else:
-                    #downsample
-                    accumulated_clouds[i].voxel_down_sample(voxel_size=0.2)
-                    pcd_list.append(accumulated_clouds[i])
-                    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
-                    axes.transform(global_poses[i])
-                    poses_o3d.append(axes)
+
+            pcd_list = [accumulated_pc.get_full_pointcloud(voxel_size=0.5)]
 
             o3d.visualization.draw_geometries(pcd_list + poses_o3d)
 
