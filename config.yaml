@@ -4,8 +4,8 @@ DATASET:
   # select your dataset (decomment only one of the following lines) 
   #type: EUROC_DATASET  
   # type: KITTI_DATASET
-  # type: TUM_DATASET
-  type: BONN_DATASET
+  type: TUM_DATASET
+  # type: BONN_DATASET
   #type: REPLICA_DATASET
   # type: VIDEO_DATASET
   #type: FOLDER_DATASET
@@ -36,11 +36,11 @@ TUM_DATASET:
   # name: rgbd_dataset_freiburg3_long_office_household
   # settings: dataset/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
   #
-  # name: rgbd_dataset_freiburg1_desk
-  # settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
+  name: rgbd_dataset_freiburg1_desk
+  settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
   #
-  name: rgbd_dataset_freiburg3_walking_xyz  # do not use this for mono, there are some in-place rotations during exploratory phases
-  settings: dataset/TUM3.yaml # do not forget to set the corresponding camera settings file 
+  # name: rgbd_dataset_freiburg3_walking_xyz  # do not use this for mono, there are some in-place rotations during exploratory phases
+  # settings: dataset/TUM3.yaml # do not forget to set the corresponding camera settings file 
   
   associations: associations.txt
   groundtruth_file: auto
@@ -49,7 +49,7 @@ TUM_DATASET:
   pcd_downsample: 128
   pcd_downsample_init: 32
   adaptive_pointsize: True
-  point_size: 0.01
+  point_size: 0.05
 
    ## 3DGS default parameters
   gs_opt_params:
@@ -63,12 +63,12 @@ TUM_DATASET:
     scaling_lr: 0.001
     rotation_lr: 0.001
     percent_dense: 0.005
-    lambda_dssim: 0.1
+    lambda_dssim: 0.05
     densification_interval: 100
-    opacity_reset_interval: 5000
+    opacity_reset_interval: 15000
     densify_from_iter: 500
-    densify_until_iter: 15000
-    densify_grad_threshold: 0.0002
+    densify_until_iter: 20000
+    densify_grad_threshold: 0.008
 
   pipeline_params:
     convert_SHs_python: False

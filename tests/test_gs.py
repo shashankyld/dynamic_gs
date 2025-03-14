@@ -37,7 +37,7 @@ depth_scale = 1/5000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-img_id = 0
+img_id = 100
 img = dataset.getImage(img_id)
 depth = dataset.getDepth(img_id) * depth_scale
 sh_degree = 0 
@@ -45,7 +45,7 @@ sh_degree = 0
 render_width = dataset.width
 render_height = dataset.height
 learning_rate = 0.001
-num_iterations = 1000
+num_iterations = 10001
 background_color = torch.zeros(3).to(device)
 fx = config.cam_settings['Camera.fx']
 fy = config.cam_settings['Camera.fy']
@@ -56,7 +56,7 @@ T = np.zeros(3)
 
 # 1. Create Gaussian Model
 gaussian_model = GaussianModel(sh_degree=sh_degree, config = config)
-gaussian_model.init_lr(6.0)
+gaussian_model.init_lr(8.0)
 
 # Setting up training parameters 
 training_params = config.gs_opt_params
@@ -96,6 +96,7 @@ for iteration in tqdm(range(num_iterations)):
     rendered_image = render_output["render"]
     viewspace_points = render_output["viewspace_points"]
     visibility_filter = render_output["visibility_filter"]
+    rendered_depth = render_output["depth"]
 
     # Visualize the rendered image
     print("Shape of render_output", rendered_image.shape)
@@ -104,16 +105,24 @@ for iteration in tqdm(range(num_iterations)):
     print("Shape of the target image", img.shape)
     rendered_img_view = rendered_image.cpu().detach().numpy().transpose(1, 2, 0)
     
-    # cv2.imshow("Rendered Image", rendered_img_view)
-    # cv2.imshow("Target Image", img)
-    # cv2.waitKey(1000)
-
+    rendered_depth_view = rendered_depth.cpu().detach().numpy().transpose(1, 2, 0)
+    print("Rendered depth shape", rendered_depth_view.shape)
+    print("depth shape", depth.shape)   
 
     # b. Calculate Loss (example: L1 loss)
     target_image = torch.from_numpy(img).to(device).float() / 255.0  # Assuming img is a NumPy array
     target_image = target_image.permute(2, 0, 1)
 
-    loss = torch.nn.functional.l1_loss(rendered_image, target_image)
+    target_depth = torch.from_numpy(depth).to(device).float()
+    target_depth = target_depth.unsqueeze(0)
+    depth_mask = (target_depth > 0).float()
+
+    masked_target_depth = target_depth * depth_mask
+    masked_rendered_depth = rendered_depth.squeeze(0) * depth_mask
+
+    depth_loss = torch.nn.functional.l1_loss(masked_rendered_depth, masked_target_depth)
+
+    loss = torch.nn.functional.l1_loss(rendered_image, target_image) + depth_loss
 
     # c. Backpropagation
     gaussian_model.optimizer.zero_grad()

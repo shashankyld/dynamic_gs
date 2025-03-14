@@ -143,6 +143,8 @@ class Dataset(object):
         self.timestamps = None 
         self._timestamp = None       # current timestamp if available [s]
         self._next_timestamp = None  # next timestamp if available otherwise an estimate [s]
+        self.width = None
+        self.height = None
         
     def isOk(self):
         return self.is_ok
@@ -550,6 +552,9 @@ class TumDataset(Dataset):
             raise ValueError('Video dataset only supports MONOCULAR and RGBD sensor types')          
         self.fps = 30
         self.scale_viewer_3d = 0.1
+        self.width = None
+        self.height = None
+
         if sensor_type == SensorType.MONOCULAR:
             self.scale_viewer_3d = 0.05             
         print('Processing TUM Sequence')        
@@ -594,7 +599,11 @@ class TumDataset(Dataset):
                 self._next_timestamp = self._timestamp + self.Ts                
         else:
             self.is_ok = False      
-            self._timestamp = None                       
+            self._timestamp = None 
+
+        if self.width is None:  
+            self.width = img.shape[1]
+            self.height = img.shape[0]                      
         return img 
 
 class BONNDataset(Dataset):

@@ -16,8 +16,9 @@ class SlamParameters:
     kDynamicStride = 2      # 4
 
     # STARTING AND ENDING FRAME
-    kStartingFrameIdx = 250
-    kEndingFrameIdx = 330
+    kStartingFrameIdx = 0
+    kEndingFrameIdx = 300
+    
     # Keyframe creation parameters
     MIN_DISTANCE_BETWEEN_KEYFRAMES = 1  # meters
     MIN_ROTATION_BETWEEN_KEYFRAMES = 20.0  # degrees
