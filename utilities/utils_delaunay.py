@@ -681,3 +681,278 @@ def get_static_dynamic_edges(curr_frame, slam):
     draw_delaunay_triangulation_using_G_kps(G_curr_dynamic_edges, fake_curr, title = "Dynamic Edges")
 
     draw_static_dynamic_edges(G_curr, G_curr_dynamic_edges, fake_curr)
+
+
+def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2):
+    """
+    Instead of just comparing the last-keyframe and k-frames-away frame, 
+    we compare the current frame edges with a batch of frames over time for better temporal consistency.
+    
+    Key Insight:
+    - If an edge length in 3D is static, it should remain nearly the same across multiple frames.
+    - We collect the 3D lengths of each edge over the batch, apply median filtering to reject outliers, 
+      and then compute the variance. If the variance is high, we mark the edge as dynamic.
+    
+    Args:
+        curr_frame: Current frame being processed.
+        slam: SLAM system containing previous frames and configuration.
+        batch_size: How many frames to consider for comparison.
+        stride: Step size between frames when collecting the batch.
+
+    Returns:
+        (G_curr_static, G_curr_dynamic): A tuple of two graphs:
+            - G_curr_static: Graph containing only static edges.
+            - G_curr_dynamic: Graph containing edges marked as dynamic.
+    """
+    import numpy as np
+    import networkx as nx
+    from scipy.stats import median_abs_deviation
+
+    # Grab the last keyframe for reference
+    prev_delaunay_frame = slam.map.get_last_keyframe()
+    
+    # Create a "batch" of frames to compare over time
+    # We'll collect frames from (current_id - stride * i) in [1..batch_size]
+    curr_id = curr_frame.id
+    frames_batch = []
+    for i in range(batch_size):
+        try:
+            frame_id = curr_id - (i+1)*stride
+            if frame_id < 0:
+                break
+            f = get_frame_from_pyslam_dataloader(slam.dataset, slam.groundtruth, frame_id, slam.config)
+        except KeyError:
+            break
+        if f is not None:
+            frames_batch.append(f)
+    # frames_batch now holds up to batch_size older frames
+
+    if not frames_batch:
+        print("No older frames found for temporal consistency. Reverting to single-frame check.")
+        # Fallback: just do a quick check with the last keyframe
+        return get_static_dynamic_edges(curr_frame, slam)
+    
+    # STEP 1: Match common keypoints across all frames
+    print(f"Finding common keypoints across {len(frames_batch) + 2} frames...")
+    
+    # First match keypoints between current frame and previous keyframe
+    matches_curr_prev = slam.tracker.match_frames(curr_frame, prev_delaunay_frame)
+    if len(matches_curr_prev) < 10:
+        print("Not enough matches between current frame and keyframe. Reverting to single-frame check.")
+        return get_static_dynamic_edges(curr_frame, slam)
+    
+    # Create mappings between current and keyframe indices
+    curr_to_prev = {curr_idx: prev_idx for curr_idx, prev_idx in matches_curr_prev}
+    prev_to_curr = {prev_idx: curr_idx for curr_idx, prev_idx in matches_curr_prev}
+    
+    # Now match keypoints between each batch frame and the keyframe
+    batch_matches = []
+    for f in frames_batch:
+        matches = slam.tracker.match_frames(f, prev_delaunay_frame)
+        if len(matches) < 10:
+            print(f"Not enough matches for batch frame {f.id}. Skipping.")
+            continue
+        batch_matches.append(matches)
+    
+    if not batch_matches:
+        print("No batch frames with enough matches. Reverting to single-frame check.")
+        return get_static_dynamic_edges(curr_frame, slam)
+    
+    # Find keypoints common to all frames (keyframe, current, and all batch frames)
+    common_prev_indices = set(prev_to_curr.keys())
+    for matches in batch_matches:
+        batch_to_prev = {batch_idx: prev_idx for batch_idx, prev_idx in matches}
+        common_prev_indices &= set(batch_to_prev.values())
+    
+    if len(common_prev_indices) < 10:
+        print(f"Only {len(common_prev_indices)} keypoints common across all frames. Reverting to single-frame check.")
+        return get_static_dynamic_edges(curr_frame, slam)
+    
+    print(f"Found {len(common_prev_indices)} keypoints common to all frames")
+    
+    # STEP 2: Filter out keypoints with invalid depth
+    valid_prev_indices = []
+    for idx in common_prev_indices:
+        # Check depth in keyframe
+        kp = prev_delaunay_frame.keypoints[idx]
+        x, y = int(kp[0]), int(kp[1])
+        if x < 0 or x >= prev_delaunay_frame.depth.shape[1] or y < 0 or y >= prev_delaunay_frame.depth.shape[0]:
+            continue
+        if prev_delaunay_frame.depth[y, x] <= 0:
+            continue
+        
+        # Check depth in current frame
+        curr_idx = prev_to_curr[idx]
+        kp = curr_frame.keypoints[curr_idx]
+        x, y = int(kp[0]), int(kp[1])
+        if x < 0 or x >= curr_frame.depth.shape[1] or y < 0 or y >= curr_frame.depth.shape[0]:
+            continue
+        if curr_frame.depth[y, x] <= 0:
+            continue
+        
+        # Check depth in all batch frames
+        valid_in_all_batch = True
+        for batch_idx, matches in enumerate(batch_matches):
+            batch_to_prev = dict(matches)
+            batch_to_prev_inv = {v: k for k, v in batch_to_prev.items()}
+            if idx not in batch_to_prev_inv:
+                valid_in_all_batch = False
+                break
+            
+            batch_frame = frames_batch[batch_idx]
+            batch_kp_idx = batch_to_prev_inv[idx]
+            kp = batch_frame.keypoints[batch_kp_idx]
+            x, y = int(kp[0]), int(kp[1])
+            if x < 0 or x >= batch_frame.depth.shape[1] or y < 0 or y >= batch_frame.depth.shape[0]:
+                valid_in_all_batch = False
+                break
+            if batch_frame.depth[y, x] <= 0:
+                valid_in_all_batch = False
+                break
+        
+        if valid_in_all_batch:
+            valid_prev_indices.append(idx)
+    
+    if len(valid_prev_indices) < 10:
+        print(f"Only {len(valid_prev_indices)} keypoints with valid depth across all frames. Reverting to single-frame check.")
+        return get_static_dynamic_edges(curr_frame, slam)
+    
+    print(f"Found {len(valid_prev_indices)} keypoints with valid depth across all frames")
+    
+    # STEP 3: Create fake frames with only the matched keypoints
+    camera_matrix = curr_frame.camera_matrix
+    
+    # Create fake keyframe
+    fake_kf = Frame(
+        frame_id=prev_delaunay_frame.id,
+        timestamp=prev_delaunay_frame.timestamp,
+        camera_matrix=camera_matrix
+    )
+    fake_kf._image = prev_delaunay_frame.image
+    fake_kf._depth = prev_delaunay_frame.depth
+    fake_kf.keypoints = prev_delaunay_frame.keypoints[valid_prev_indices]
+    
+    # Create mapping from original indices to new indices
+    prev_old_to_new = {old_idx: new_idx for new_idx, old_idx in enumerate(valid_prev_indices)}
+    
+    # Create fake current frame
+    fake_curr = Frame(
+        frame_id=curr_frame.id,
+        timestamp=curr_frame.timestamp,
+        camera_matrix=camera_matrix
+    )
+    fake_curr._image = curr_frame.image
+    fake_curr._depth = curr_frame.depth
+    fake_curr.keypoints = curr_frame.keypoints[[prev_to_curr[idx] for idx in valid_prev_indices]]
+    
+    # Create fake batch frames
+    fake_batch_frames = []
+    for batch_idx, matches in enumerate(batch_matches):
+        batch_frame = frames_batch[batch_idx]
+        batch_to_prev = dict(matches)
+        batch_to_prev_inv = {v: k for k, v in batch_to_prev.items()}
+        
+        fake_batch = Frame(
+            frame_id=batch_frame.id,
+            timestamp=batch_frame.timestamp,
+            camera_matrix=camera_matrix
+        )
+        fake_batch._image = batch_frame.image
+        fake_batch._depth = batch_frame.depth
+        fake_batch.keypoints = batch_frame.keypoints[[batch_to_prev_inv[idx] for idx in valid_prev_indices]]
+        fake_batch_frames.append(fake_batch)
+    
+    # STEP 4: Build Delaunay triangulation on the keyframe
+    G_prev = delaunay_triangulation(fake_kf)
+    if G_prev is None or len(G_prev.edges()) == 0:
+        print("Failed to create Delaunay triangulation. Exiting.")
+        return nx.Graph(), nx.Graph()
+    
+    edges_list = list(G_prev.edges())
+    print(f"Delaunay triangulation has {len(edges_list)} edges")
+    
+    # Build new graphs for static and dynamic edges
+    G_curr_static = nx.Graph()
+    G_curr_dynamic = nx.Graph()
+    
+    # STEP 5 & 6: Compute edge lengths across frames, apply median filtering, and determine static/dynamic
+    # Get 3D points for all frames
+    kf_3d_pts = fake_kf.get_3d_kps()
+    curr_3d_pts = fake_curr.get_3d_kps()
+    batch_3d_pts = [f.get_3d_kps() for f in fake_batch_frames]
+    
+    # For visualization: collect edge lengths statistics
+    all_edge_lengths = []
+    all_edge_variances = []
+    
+    for edge in edges_list:
+        i, j = edge
+        
+        # Get edge lengths across all frames
+        kf_len = np.linalg.norm(kf_3d_pts[j] - kf_3d_pts[i])
+        curr_len = np.linalg.norm(curr_3d_pts[j] - curr_3d_pts[i])
+        
+        batch_lens = []
+        for pts_3d in batch_3d_pts:
+            batch_len = np.linalg.norm(pts_3d[j] - pts_3d[i])
+            batch_lens.append(batch_len)
+        
+        # Combine all lengths
+        all_lens = [kf_len, curr_len] + batch_lens
+        
+        # STEP 5: Apply median filtering to reject outliers
+        if len(all_lens) >= 3:  # Need at least 3 samples for meaningful filtering
+            all_lens_array = np.array(all_lens)
+            median_len = np.median(all_lens_array)
+            mad = median_abs_deviation(all_lens_array)
+            
+            # Filter out lengths that are more than 3 MADs from the median
+            mask = np.abs(all_lens_array - median_len) <= 3 * mad
+            filtered_lens = all_lens_array[mask]
+        else:
+            filtered_lens = np.array(all_lens)
+        
+        if len(filtered_lens) < 2:
+            # Not enough samples after filtering
+            G_curr_dynamic.add_edge(i, j)
+            continue
+        
+        # STEP 6: Calculate variance to determine static vs dynamic
+        var_len = np.var(filtered_lens)
+        mean_len = np.mean(filtered_lens)
+        # Normalize variance by the mean length for scale invariance
+        normalized_var = var_len / (mean_len**2 + 1e-6)  # Add small epsilon to avoid division by zero
+        
+        # For visualization
+        all_edge_lengths.append(mean_len)
+        all_edge_variances.append(normalized_var)
+        
+        # Get dynamic threshold from config or use default
+        THRESH_VAR = slam.config.DYNAMIC_EDGE_THRESHOLD_VAR 
+        
+        if normalized_var < THRESH_VAR:
+            G_curr_static.add_edge(i, j)
+        else:
+            G_curr_dynamic.add_edge(i, j)
+    
+    # STEP 7: Visualize results
+    # Create a visualization showing static vs dynamic edges
+    draw_static_dynamic_edges(G_curr_static, G_curr_dynamic, fake_curr)
+    
+    # Create histogram of edge lengths and variances
+    if len(all_edge_lengths) > 0:
+        lengths_hist = np.histogram(all_edge_lengths, bins=30)
+        variances_hist = np.histogram(all_edge_variances, bins=30)
+        
+        lengths_img = hist_img(lengths_hist[0], lengths_hist[1])
+        cv2.imshow("Edge Lengths Distribution", lengths_img)
+        
+        variances_img = hist_img(variances_hist[0], variances_hist[1])
+        cv2.putText(variances_img, f'Threshold: {THRESH_VAR:.4f}', (10, 60), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
+        cv2.imshow("Edge Variances Distribution", variances_img)
+        
+        cv2.waitKey(1)
+    
+    # STEP 8: Return results
+    return (G_curr_static, G_curr_dynamic)

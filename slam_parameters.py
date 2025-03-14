@@ -9,6 +9,7 @@ class SlamParameters:
     # Dynamic SLAM
     kNumFramesAway = 5
     kDynamicEdgeThreshold = 0.1
+    kDynamicEdgeThresholdVar = 0.02
 
     # STARTING AND ENDING FRAME
     kStartingFrameIdx = 200

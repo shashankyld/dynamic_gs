@@ -67,6 +67,7 @@ class Config(object):
         self.NUM_LOCAL_KEYFRAMES = slam_parameters.SlamParameters.NUM_LOCAL_KEYFRAMES
         self.NUM_FEATURES = slam_parameters.SlamParameters.NUM_FEATURES
         self.DYNAMIC_EDGE_THRESHOLD = slam_parameters.SlamParameters.kDynamicEdgeThreshold
+        self.DYNAMIC_EDGE_THRESHOLD_VAR = slam_parameters.SlamParameters.kDynamicEdgeThresholdVar
         
         self.get_dataset_settings()
         self.get_cam_settings()
