@@ -113,7 +113,7 @@ def draw_delaunay_triangulation(G, frame):
     
     return vis_img
 
-def draw_delaunay_triangulation_using_G_kps(G, frame):
+def draw_delaunay_triangulation_using_G_kps(G, frame, title=""):
     """
     Draw delaunay triangulation on frame using keypoints from graph
     Args:
@@ -160,7 +160,7 @@ def draw_delaunay_triangulation_using_G_kps(G, frame):
             cv2.line(vis_img, pt1, pt2, (255, 0, 0), 1)
 
     # Show image
-    cv2.imshow("Delaunay Triangulation (Graph KPs Only)", vis_img)
+    cv2.imshow("Delaunay Triangulation (Graph KPs Only)" + title, vis_img)
     cv2.waitKey(1)
     
     return vis_img
@@ -214,6 +214,56 @@ def matches_with_last_dealunay(frame, frame_with_last_dealunay):
             G.add_edge(match[0], match[1])
 
     return G
+
+def draw_static_dynamic_edges(G_static, G_dynamic, frame):
+    """
+    # Static in green and dynamic in red
+    """
+    if G_static is None or G_dynamic is None:
+        print("No graph to draw")
+        return None
+
+    # Get keypoints and convert to numpy if needed
+    keypoints = frame.keypoints
+    if isinstance(keypoints, torch.Tensor):
+        keypoints_np = keypoints.cpu().numpy()
+    else:
+        keypoints_np = np.array(keypoints)
+
+    # Get image and convert to numpy if needed
+    img = frame.image if hasattr(frame, 'image') else frame.img
+    if isinstance(img, torch.Tensor):
+        img_np = img.cpu().numpy()
+    else:
+        img_np = np.array(img)
+
+    # Create visualization image
+    vis_img = img_np.copy() if len(img_np.shape) == 3 else cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+
+    # Draw keypoints
+    for keypoint in keypoints_np:
+        cv2.circle(vis_img, 
+                  (int(keypoint[0]), int(keypoint[1])), 
+                  3, (0, 255, 0), -1)
+
+    # Draw static edges in green
+    for edge in G_static.edges():
+        pt1 = tuple(map(int, keypoints_np[edge[0]]))
+        pt2 = tuple(map(int, keypoints_np[edge[1]]))
+        cv2.line(vis_img, pt1, pt2, (0, 255, 0), 1)
+
+    # Draw dynamic edges in red
+    for edge in G_dynamic.edges():
+        pt1 = tuple(map(int, keypoints_np[edge[0]]))
+        pt2 = tuple(map(int, keypoints_np[edge[1]]))
+        cv2.line(vis_img, pt1, pt2, (0, 0, 255), 1)
+
+    # Show image
+    cv2.imshow("Static and Dynamic Edges", vis_img)
+    cv2.waitKey(1)
+    
+    return vis_img
+
 
 def draw_matches_with_last_dealunay(G, frame, frame_with_last_dealunay):
     """
@@ -592,7 +642,7 @@ def get_static_dynamic_edges(curr_frame, slam):
     # Create Delaunay graph for the keyframe from the common matches
     G_prev = delaunay_triangulation(fake_kf)
     
-    draw_delaunay_triangulation_using_G_kps(G_prev, fake_kf)
+    # draw_delaunay_triangulation_using_G_kps(G_prev, fake_kf)
 
     edges_list = list(G_prev.edges())
     print("Edges List: ", edges_list)   
@@ -612,65 +662,22 @@ def get_static_dynamic_edges(curr_frame, slam):
         print(f"Edge lengths: Prev: {prev_edge_len}, Curr: {curr_edge_len}, Compare: {compare_edge_len}")
 
     
-
-    # DEPTH IMAGE VISUALIZTION 
-    # Show white image where depth is available and black where depth is not available or zero and also show kps in the image 
-    # Also show how many kps are there in the image with zero depth and non-zero depth
-    # Only for the current frame
-
-    # Create a binary mask for valid depth
-    depth_valid = (fake_curr._depth > 0).astype(np.uint8) * 255
-
-    # Convert to 3-channel for visualization
-    depth_vis = cv2.cvtColor(depth_valid, cv2.COLOR_GRAY2BGR)
-
-    zero_depth_count = 0
-    non_zero_depth_count = 0
-
-    # Ensure we have keypoints
-    if fake_curr.keypoints is not None:
-        for kp in fake_curr.keypoints:
-            x, y = int(kp[0]), int(kp[1])
-            # Check image bounds
-            if 0 <= x < fake_curr._depth.shape[1] and 0 <= y < fake_curr._depth.shape[0]:
-                if fake_curr._depth[y, x] > 0:
-                    non_zero_depth_count += 1
-                    color = (0, 255, 0)  # Green circle for valid depth
-                else:
-                    zero_depth_count += 1
-                    color = (0, 0, 255)  # Red circle for zero depth
-                cv2.circle(depth_vis, (x, y), 3, color, -1)
-
-    # Add text overlay
-    info_text = f"Zero Depth KPs: {zero_depth_count}, Non-zero Depth KPs: {non_zero_depth_count}"
-    cv2.putText(depth_vis, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-    # Show visualization
-    cv2.imshow("Depth Visualization", depth_vis)
-    cv2.waitKey(1)
-
-    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
-
-    full_pc_pts, full_pc_colors = fake_curr.get_points()
-    full_pc = o3d.geometry.PointCloud()
-    full_pc.points = o3d.utility.Vector3dVector(full_pc_pts)
-    full_pc.colors = o3d.utility.Vector3dVector(full_pc_colors)
-    
-    kps_pcd = o3d.geometry.PointCloud()
-    kps_pcd.points = o3d.utility.Vector3dVector(curr_kps_3d)
-    kps_pcd.colors = o3d.utility.Vector3dVector(np.random.rand(len(curr_kps_3d), 3))
-
-    edges = []
+    # Create a new graph for the current frame 
+    G_curr = nx.Graph()
+    G_curr_dynamic_edges = nx.Graph()
+    # Add edges to the graph when the length of the edge is within a threshold compared to the compare frame and prev frame
     for edge in edges_list:
         i, j = edge
-        # Create line objects in open3d
-        line = o3d.geometry.LineSet()
-        line.points = o3d.utility.Vector3dVector([curr_kps_3d[i], curr_kps_3d[j]])
-        line.lines = o3d.utility.Vector2iVector([[0, 1]])
-        line.colors = o3d.utility.Vector3dVector([np.random.rand(3)])
-        edges.append(line)
+        prev_edge_len = np.linalg.norm(prev_kps_3d[j] - prev_kps_3d[i])
+        curr_edge_len = np.linalg.norm(curr_kps_3d[j] - curr_kps_3d[i])
+        compare_edge_len = np.linalg.norm(compare_kps_3d[j] - compare_kps_3d[i])
+        if abs(curr_edge_len - compare_edge_len) < slam.config.DYNAMIC_EDGE_THRESHOLD and abs(curr_edge_len - prev_edge_len) < slam.config.DYNAMIC_EDGE_THRESHOLD :
+            G_curr.add_edge(i, j)
+        else:
+            G_curr_dynamic_edges.add_edge(i, j)
 
-    # # Visualize point cloud and edges
-    o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
+    # Visualize the graph
+    draw_delaunay_triangulation_using_G_kps(G_curr, fake_curr, title = "Static Edges")
+    draw_delaunay_triangulation_using_G_kps(G_curr_dynamic_edges, fake_curr, title = "Dynamic Edges")
 
-                 
+    draw_static_dynamic_edges(G_curr, G_curr_dynamic_edges, fake_curr)
