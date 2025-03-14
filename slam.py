@@ -168,7 +168,11 @@ if __name__ == "__main__":
                             
                         # G_all_frames(curr_frame=curr_frame, slam=slam)
                         # get_static_dynamic_edges(curr_frame, slam)
-                        get_static_dynamic_edges_batch(curr_frame, slam)
+                        if config.DYNAMIC_PROCESSING_METHOD == "batch":
+                            G_static, G_dynamic= get_static_dynamic_edges_batch(curr_frame, slam)
+                        elif config.DYNAMIC_PROCESSING_METHOD == "k_frames_away":
+                            G_static, G_dynamic = get_static_dynamic_edges(curr_frame, slam) 
+                        
                         
 
                     prev_frame = curr_frame 

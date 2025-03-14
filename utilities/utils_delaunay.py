@@ -671,8 +671,12 @@ def get_static_dynamic_edges(curr_frame, slam):
         prev_edge_len = np.linalg.norm(prev_kps_3d[j] - prev_kps_3d[i])
         curr_edge_len = np.linalg.norm(curr_kps_3d[j] - curr_kps_3d[i])
         compare_edge_len = np.linalg.norm(compare_kps_3d[j] - compare_kps_3d[i])
+
+  
+
         if abs(curr_edge_len - compare_edge_len) < slam.config.DYNAMIC_EDGE_THRESHOLD and abs(curr_edge_len - prev_edge_len) < slam.config.DYNAMIC_EDGE_THRESHOLD :
-            G_curr.add_edge(i, j)
+            if abs(curr_edge_len) < slam.config.MAX_EDGE_LENGTH: 
+                G_curr.add_edge(i, j)
         else:
             G_curr_dynamic_edges.add_edge(i, j)
 
@@ -681,9 +685,12 @@ def get_static_dynamic_edges(curr_frame, slam):
     draw_delaunay_triangulation_using_G_kps(G_curr_dynamic_edges, fake_curr, title = "Dynamic Edges")
 
     draw_static_dynamic_edges(G_curr, G_curr_dynamic_edges, fake_curr)
+    connected_components_ = connected_components(G_curr, fake_curr)
+
+    return G_curr, G_curr_dynamic_edges
 
 
-def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2):
+def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 2, stride = 4):
     """
     Instead of just comparing the last-keyframe and k-frames-away frame, 
     we compare the current frame edges with a batch of frames over time for better temporal consistency.
@@ -707,6 +714,9 @@ def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2)
     import numpy as np
     import networkx as nx
     from scipy.stats import median_abs_deviation
+
+    batch_size = slam.config.DYNAMIC_BATCH_SIZE
+    stride = slam.config.DYNAMIC_STRIDE
 
     # Grab the last keyframe for reference
     prev_delaunay_frame = slam.map.get_last_keyframe()
@@ -908,7 +918,8 @@ def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2)
             
             # Filter out lengths that are more than 3 MADs from the median
             mask = np.abs(all_lens_array - median_len) <= 3 * mad
-            filtered_lens = all_lens_array[mask]
+            filtered_lens = all_lens_array
+            # filtered_lens = all_lens_array[mask] #TODO : Bypassing median logic
         else:
             filtered_lens = np.array(all_lens)
         
@@ -930,13 +941,15 @@ def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2)
         # Get dynamic threshold from config or use default
         THRESH_VAR = slam.config.DYNAMIC_EDGE_THRESHOLD_VAR 
         
-        if normalized_var < THRESH_VAR:
+        if normalized_var < THRESH_VAR and mean_len < slam.config.MAX_EDGE_LENGTH:
             G_curr_static.add_edge(i, j)
         else:
             G_curr_dynamic.add_edge(i, j)
     
     # STEP 7: Visualize results
     # Create a visualization showing static vs dynamic edges
+    draw_delaunay_triangulation_using_G_kps(G_curr_static, fake_curr, title = "Static Edges")
+
     draw_static_dynamic_edges(G_curr_static, G_curr_dynamic, fake_curr)
     
     # Create histogram of edge lengths and variances
@@ -953,6 +966,160 @@ def get_static_dynamic_edges_batch(curr_frame, slam, batch_size = 5, stride = 2)
         cv2.imshow("Edge Variances Distribution", variances_img)
         
         cv2.waitKey(1)
+
+    connected_components(G_curr_static, fake_curr)
     
     # STEP 8: Return results
     return (G_curr_static, G_curr_dynamic)
+
+
+def connected_components(G, frame):
+    """
+    Find connected components in a graph and return them as a list of graphs
+    using DFS traversal. Visualize the components with correct edge and keypoint placement.
+    
+    Args:
+        G: NetworkX graph object
+        frame: Frame object containing image (and optionally keypoints)
+    
+    Returns:
+        list: List of connected components, where each component is a subgraph
+    """
+    if G is None or len(G.nodes()) == 0:
+        print("Empty graph, no components to find")
+        return []
+
+    def dfs(node, visited, component):
+        """Helper function for DFS traversal"""
+        visited.add(node)
+        component.add_node(node)
+        
+        for neighbor in G.neighbors(node):
+            if neighbor not in visited:
+                component.add_edge(node, neighbor)
+                dfs(neighbor, visited, component)
+
+    # Keep track of visited nodes
+    visited = set()
+    components = []
+    
+    # For each unvisited node, start a new DFS traversal
+    for node in G.nodes():
+        if node not in visited:
+            component = nx.Graph()
+            dfs(node, visited, component)
+            components.append(component)
+
+    # Sort components by size (largest first)
+    components.sort(key=lambda x: len(x.nodes()), reverse=True)
+
+    print(f"Found {len(components)} connected components")
+
+    # Visualization code
+    if len(components) > 0:
+        # Create visualization image
+        img = frame._image
+        if isinstance(img, torch.Tensor):
+            img_np = img.cpu().numpy()
+        else:
+            img_np = np.array(img)
+        vis_img = img_np.copy() if len(img_np.shape) == 3 else cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+
+        # Get keypoints
+        keypoints = frame.keypoints
+        if isinstance(keypoints, torch.Tensor):
+            keypoints_np = keypoints.cpu().numpy()
+        else:
+            keypoints_np = np.array(keypoints)
+
+        # Generate random colors for each component
+        colors = np.random.randint(0, 255, size=(len(components), 3))
+        
+        # Draw each component with a different color
+        for idx, component in enumerate(components):
+            color = tuple(map(int, colors[idx]))
+            
+            # Collect valid points for this component to compute convex hull
+            component_points = []
+            
+            # Draw edges first
+            for edge in component.edges():
+                try:
+                    if 0 <= int(edge[0]) < len(keypoints_np) and 0 <= int(edge[1]) < len(keypoints_np):
+                        kp1 = keypoints_np[int(edge[0])]
+                        kp2 = keypoints_np[int(edge[1])]
+                        
+                        # Ensure we have valid 2D coordinates
+                        if len(kp1) >= 2 and len(kp2) >= 2:
+                            pt1 = (int(float(kp1[0])), int(float(kp1[1])))
+                            pt2 = (int(float(kp2[0])), int(float(kp2[1])))
+                            
+                            # Ensure points are valid (not NaN)
+                            if not (np.isnan(pt1[0]) or np.isnan(pt1[1]) or 
+                                   np.isnan(pt2[0]) or np.isnan(pt2[1])):
+                                cv2.line(vis_img, pt1, pt2, color, 1)
+                except Exception as e:
+                    print(f"Error drawing edge {edge}: {e}")
+            
+            # Draw nodes on top and collect points for convex hull
+            for node in component.nodes():
+                try:
+                    if 0 <= int(node) < len(keypoints_np):
+                        kp = keypoints_np[int(node)]
+                        
+                        # Ensure we have valid 2D coordinates
+                        if len(kp) >= 2:
+                            pt = (int(float(kp[0])), int(float(kp[1])))
+                            
+                            # Ensure point is valid (not NaN)
+                            if not (np.isnan(pt[0]) or np.isnan(pt[1])):
+                                cv2.circle(vis_img, pt, 3, color, -1)
+                                component_points.append(pt)
+                except Exception as e:
+                    print(f"Error drawing node {node}: {e}")
+            
+            # Draw convex hull for this component if it has enough points
+            if len(component_points) >= 3:
+                try:
+                    # Convert points to the format required by cv2.convexHull
+                    points_array = np.array(component_points, dtype=np.int32)
+                    
+                    # Compute convex hull
+                    hull = cv2.convexHull(points_array)
+                    
+                    # Draw convex hull as a polygon
+                    cv2.polylines(vis_img, [hull], True, color, 2)
+                    
+                    # Optionally, fill the convex hull with a semi-transparent color
+                    hull_mask = np.zeros(vis_img.shape[:2], dtype=np.uint8)
+                    cv2.fillPoly(hull_mask, [hull], 255)
+                    
+                    # Create colored overlay
+                    color_with_alpha = (*color, 64)  # RGB with alpha=64
+                    overlay = np.zeros_like(vis_img)
+                    overlay[hull_mask > 0] = color_with_alpha[:3]  # Apply RGB
+                    
+                    # Blend overlay with original image
+                    alpha = 0  # Transparency factor
+                    cv2.addWeighted(overlay, alpha, vis_img, 1 - alpha, 0, vis_img)
+                    
+                except Exception as e:
+                    print(f"Error drawing convex hull for component {idx}: {e}")
+
+        # Add text showing number of components and sizes
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        y_offset = 30
+        cv2.putText(vis_img, f'Number of components: {len(components)}', 
+                    (10, y_offset), font, 0.7, (255,255,255), 2)
+        
+        # Show sizes of top 3 components
+        for i in range(min(3, len(components))):
+            y_offset += 25
+            cv2.putText(vis_img, f'Component {i+1} size: {len(components[i].nodes())}', 
+                        (10, y_offset), font, 0.7, (255,255,255), 2)
+
+        # Show image
+        cv2.imshow("Connected Components", vis_img)
+        cv2.waitKey(1)
+
+    return components

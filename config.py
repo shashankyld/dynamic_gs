@@ -68,7 +68,11 @@ class Config(object):
         self.NUM_FEATURES = slam_parameters.SlamParameters.NUM_FEATURES
         self.DYNAMIC_EDGE_THRESHOLD = slam_parameters.SlamParameters.kDynamicEdgeThreshold
         self.DYNAMIC_EDGE_THRESHOLD_VAR = slam_parameters.SlamParameters.kDynamicEdgeThresholdVar
-        
+        self.MAX_EDGE_LENGTH = slam_parameters.SlamParameters.kMaxEdgeLength
+        self.DYNAMIC_PROCESSING_METHOD = slam_parameters.SlamParameters.kDynamicProcessingMethod
+        self.DYNAMIC_BATCH_SIZE = slam_parameters.SlamParameters.kDynamicBatchSize
+        self.DYNAMIC_STRIDE = slam_parameters.SlamParameters.kDynamicStride
+
         self.get_dataset_settings()
         self.get_cam_settings()
         self.get_feature_manager_settings()
