@@ -214,6 +214,7 @@ class Frame:
         x = x.astype(int)
         y = y.astype(int)
         depth = self._depth[y, x]
+        print("Depth: ", depth)
         points = np.stack([(x - self.cx) * depth / self.fx,
                           (y - self.cy) * depth / self.fy,
                            depth], axis=-1)
@@ -236,5 +237,5 @@ class Frame:
                            depth], axis=-1)
         return points
     
-
+    
     

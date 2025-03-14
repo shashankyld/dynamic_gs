@@ -573,6 +573,7 @@ def get_static_dynamic_edges(curr_frame, slam):
     # Calculate edge lengths in 3D
     for edge in edges_list:
         i, j = edge
+        print("EDGE COORDINATES: ", prev_kps_3d[i], prev_kps_3d[j])
         prev_edge_len = np.linalg.norm(prev_kps_3d[j] - prev_kps_3d[i])
         curr_edge_len = np.linalg.norm(curr_kps_3d[j] - curr_kps_3d[i])
         compare_edge_len = np.linalg.norm(compare_kps_3d[j] - compare_kps_3d[i])
@@ -580,36 +581,65 @@ def get_static_dynamic_edges(curr_frame, slam):
         print(f"Edge lengths: Prev: {prev_edge_len}, Curr: {curr_edge_len}, Compare: {compare_edge_len}")
 
     
-    # Visualize edges in their images
-    def draw_edge(img, kp1, kp2, color, offset_x=0):
-        pt1 = (int(kp1[0]) + offset_x, int(kp1[1]))
-        pt2 = (int(kp2[0]) + offset_x, int(kp2[1]))
-        cv2.line(img, pt1, pt2, color, 1)
-        
 
-    # Create visualization frames
-    h1, w1 = fake_curr.image.shape[:2]
-    h2, w2 = fake_kf.image.shape[:2]
-    h3, w3 = fake_compare.image.shape[:2]
+    # DEPTH IMAGE VISUALIZTION 
+    # Show white image where depth is available and black where depth is not available or zero and also show kps in the image 
+    # Also show how many kps are there in the image with zero depth and non-zero depth
+    # Only for the current frame
 
-    # Create empty canvas with maximum height and sum of widths
-    max_h = max(h1, h2, h3)
-    vis_img = np.zeros((max_h, w1 + w2 + w3, 3), dtype=np.uint8)
+    # Create a binary mask for valid depth
+    depth_valid = (curr_frame._depth > 0).astype(np.uint8) * 255
 
-    # Add images to visualization
-    vis_img[:h1, :w1] = fake_curr.image
-    vis_img[:h2, w1:w1+w2] = fake_kf.image
-    vis_img[:h3, w1+w2:] = fake_compare.image
+    # Convert to 3-channel for visualization
+    depth_vis = cv2.cvtColor(depth_valid, cv2.COLOR_GRAY2BGR)
 
-    # Draw edges in images
-    for edge in edges_list:
-        i, j = edge
-        draw_edge(vis_img, fake_curr.keypoints[i], fake_curr.keypoints[j], (255, 0, 0))
-        draw_edge(vis_img, fake_kf.keypoints[i], fake_kf.keypoints[j], (0, 255, 0), w1)
-        draw_edge(vis_img, fake_compare.keypoints[i], fake_compare.keypoints[j], (0, 0, 255), w1+w2)
+    zero_depth_count = 0
+    non_zero_depth_count = 0
+
+    # Ensure we have keypoints
+    if curr_frame.keypoints is not None:
+        for kp in curr_frame.keypoints:
+            x, y = int(kp[0]), int(kp[1])
+            # Check image bounds
+            if 0 <= x < curr_frame._depth.shape[1] and 0 <= y < curr_frame._depth.shape[0]:
+                if curr_frame._depth[y, x] > 0:
+                    non_zero_depth_count += 1
+                    color = (0, 255, 0)  # Green circle for valid depth
+                else:
+                    zero_depth_count += 1
+                    color = (0, 0, 255)  # Red circle for zero depth
+                cv2.circle(depth_vis, (x, y), 3, color, -1)
+
+    # Add text overlay
+    info_text = f"Zero Depth KPs: {zero_depth_count}, Non-zero Depth KPs: {non_zero_depth_count}"
+    cv2.putText(depth_vis, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
     # Show visualization
-    cv2.imshow("Edge Lengths Visualization", vis_img)
+    cv2.imshow("Depth Visualization", depth_vis)
     cv2.waitKey(1)
 
+    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+
+    full_pc_pts, full_pc_colors = curr_frame.get_points()
+    full_pc = o3d.geometry.PointCloud()
+    full_pc.points = o3d.utility.Vector3dVector(full_pc_pts)
+    full_pc.colors = o3d.utility.Vector3dVector(full_pc_colors)
+    
+    kps_pcd = o3d.geometry.PointCloud()
+    kps_pcd.points = o3d.utility.Vector3dVector(curr_kps_3d)
+    kps_pcd.colors = o3d.utility.Vector3dVector(np.random.rand(len(curr_kps_3d), 3))
+
+    edges = []
+    for edge in edges_list:
+        i, j = edge
+        # Create line objects in open3d
+        line = o3d.geometry.LineSet()
+        line.points = o3d.utility.Vector3dVector([curr_kps_3d[i], curr_kps_3d[j]])
+        line.lines = o3d.utility.Vector2iVector([[0, 1]])
+        line.colors = o3d.utility.Vector3dVector([np.random.rand(3)])
+        edges.append(line)
+
+    # Visualize point cloud and edges
+    o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
 
                  
