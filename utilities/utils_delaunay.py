@@ -639,7 +639,7 @@ def get_static_dynamic_edges(curr_frame, slam):
         line.colors = o3d.utility.Vector3dVector([np.random.rand(3)])
         edges.append(line)
 
-    # Visualize point cloud and edges
-    o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
+    # # Visualize point cloud and edges
+    # o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
 
                  
