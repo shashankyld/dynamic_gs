@@ -671,6 +671,6 @@ def get_static_dynamic_edges(curr_frame, slam):
         edges.append(line)
 
     # # Visualize point cloud and edges
-    # o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
+    o3d.visualization.draw_geometries([kps_pcd] + edges + [full_pc] + [axes])
 
                  
