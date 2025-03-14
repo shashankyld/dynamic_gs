@@ -6,6 +6,7 @@ import torch
 import open3d as o3d
 from typing import List, Dict, Set
 from utilities.dataset_bridge import get_frame_from_pyslam_dataloader
+from core.frame import Frame
 
 def delaunay_triangulation(frame):
     """
@@ -255,7 +256,7 @@ def matches_with_k_frames_away_with_prev_delaunay_edges(frame, slam, k, compare_
     # Define green color for common points
     GREEN = (0, 255, 0)
 
-    # Helper function to draw keypoints
+    # Helper function to draw keypoint
     def draw_keypoint(img, kp, color, offset_x=0):
         cv2.circle(img, 
                   (int(kp[0]) + offset_x, int(kp[1])), 
@@ -341,7 +342,18 @@ def G_all_frames(curr_frame, slam):
         return None, None, None
         
     # Get existing Delaunay graph from keyframe
-    G_prev = prev_delaunay_frame._delaunay
+    G_prev = prev_delaunay_frame._delaunay # This will inevitably have missing edges and trick the system into thinking there are moving components.
+
+    # Create a new Delaunay graph for the keyframe from the common matches [1] by force 
+    # fake_kf = Frame(frame_id=prev_delaunay_frame.id, timestamp=prev_delaunay_frame.timestamp)
+    # fake_kf._image = prev_delaunay_frame.image
+    # fake_kf.keypoints = prev_delaunay_frame.keypoints[common_matches[:, 1]]
+    # G_prev = delaunay_triangulation(fake_kf)
+
+
+
+
+
     print("Prev Delaunay Graph: ", G_prev)
     if G_prev is None:
         print("No Delaunay graph in keyframe")
@@ -358,87 +370,108 @@ def G_all_frames(curr_frame, slam):
     k_to_prev = {v: k for k, v in prev_to_k.items()}
     
     # Create new graphs for current and comparison frames
+    G_prev_temp = nx.Graph()
     G_curr = nx.Graph()
     G_compare = nx.Graph()
+    
+    # Create visualization images
+    curr_img = curr_frame.image.copy()
+    prev_img = prev_delaunay_frame.image.copy()
+    compare_img = compare_frame.image.copy()
+    
+    # Ensure images are in BGR format for visualization
+    if len(curr_img.shape) == 2:
+        curr_img = cv2.cvtColor(curr_img, cv2.COLOR_GRAY2BGR)
+    if len(prev_img.shape) == 2:
+        prev_img = cv2.cvtColor(prev_img, cv2.COLOR_GRAY2BGR)
+    if len(compare_img.shape) == 2:
+        compare_img = cv2.cvtColor(compare_img, cv2.COLOR_GRAY2BGR)
     
     # Transfer edges from previous frame's Delaunay only if valid mappings exist
     for edge in G_prev.edges():
         v1, v2 = edge
         
-        # Add edge to comparison frame if both vertices have mappings
-        if v1 in prev_to_k and v2 in prev_to_k:
-            k1, k2 = prev_to_k[v1], prev_to_k[v2]
-            G_compare.add_edge(k1, k2)
+        # If v1, v2 are both in common matches - prev_idx -> then keep the edge 
+        if v1 in common_matches[:, 1] and v2 in common_matches[:, 1]:
+            G_prev_temp.add_edge(v1, v2)
+            G_curr.add_edge(prev_to_curr[v1], prev_to_curr[v2])
+            G_compare.add_edge(prev_to_k[v1], prev_to_k[v2])
+        
+            # Draw edges in each frame with increased visibility
+            # Previous frame - bright red color
+            pt1_prev = tuple(map(int, prev_delaunay_frame.keypoints[v1]))
+            pt2_prev = tuple(map(int, prev_delaunay_frame.keypoints[v2]))
+            cv2.line(prev_img, pt1_prev, pt2_prev, (0, 0, 255), 2)
             
-        # Add edge to current frame if both vertices have mappings
-        if v1 in prev_to_curr and v2 in prev_to_curr:
-            c1, c2 = prev_to_curr[v1], prev_to_curr[v2]
-            G_curr.add_edge(c1, c2)
-
-    # If either graph is empty, consider triangulation failed
-    if len(G_curr.edges()) == 0 or len(G_compare.edges()) == 0:
-        print(f"Warning: Empty graph generated. G_curr: {len(G_curr.edges())} edges, G_compare: {len(G_compare.edges())} edges")
-        return None, None, None
+            # Current frame - bright green color
+            pt1_curr = tuple(map(int, curr_frame.keypoints[prev_to_curr[v1]]))
+            pt2_curr = tuple(map(int, curr_frame.keypoints[prev_to_curr[v2]]))
+            cv2.line(curr_img, pt1_curr, pt2_curr, (0, 255, 0), 2)
+            
+            # Comparison frame - bright blue color
+            pt1_comp = tuple(map(int, compare_frame.keypoints[prev_to_k[v1]]))
+            pt2_comp = tuple(map(int, compare_frame.keypoints[prev_to_k[v2]]))
+            cv2.line(compare_img, pt1_comp, pt2_comp, (255, 0, 0), 2)
     
-    # Create visualization
-    h1, w1 = curr_frame.image.shape[:2]
-    h2, w2 = prev_delaunay_frame.image.shape[:2]
-    h3, w3 = compare_frame.image.shape[:2]
+    # Draw keypoints for better visibility
+    # Previous frame
+    for i, kp in enumerate(prev_delaunay_frame.keypoints):
+        if i in common_matches[:, 1]:
+            cv2.circle(prev_img, tuple(map(int, kp)), 5, (0, 255, 255), -1)
     
-    max_h = max(h1, h2, h3)
-    vis_img = np.zeros((max_h, w1 + w2 + w3, 3), dtype=np.uint8)
+    # Current frame
+    for i, kp in enumerate(curr_frame.keypoints):
+        if i in common_matches[:, 0]:
+            cv2.circle(curr_img, tuple(map(int, kp)), 5, (0, 255, 255), -1)
     
-    # Convert images to BGR
-    def ensure_bgr(img):
-        if len(img.shape) == 2:
-            return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        return img
+    # Comparison frame
+    for i, kp in enumerate(compare_frame.keypoints):
+        if i in common_matches[:, 2]:
+            cv2.circle(compare_img, tuple(map(int, kp)), 5, (0, 255, 255), -1)
     
-    img1 = ensure_bgr(curr_frame.image)
-    img2 = ensure_bgr(prev_delaunay_frame.image)
-    img3 = ensure_bgr(compare_frame.image)
+    # Create a combined visualization with all three frames
+    h_prev, w_prev = prev_img.shape[:2]
+    h_curr, w_curr = curr_img.shape[:2]
+    h_comp, w_comp = compare_img.shape[:2]
+    
+    max_h = max(h_prev, h_curr, h_comp)
+    combined_img = np.zeros((max_h, w_prev + w_curr + w_comp, 3), dtype=np.uint8)
     
     # Place images side by side
-    vis_img[:h1, :w1] = img1
-    vis_img[:h2, w1:w1+w2] = img2
-    vis_img[:h3, w1+w2:] = img3
+    combined_img[:h_prev, :w_prev] = prev_img
+    combined_img[:h_curr, w_prev:w_prev+w_curr] = curr_img
+    combined_img[:h_comp, w_prev+w_curr:] = compare_img
     
-    # Draw Delaunay edges on each frame
-    def draw_graph(img, G, keypoints, offset_x=0):
-        # Draw keypoints
-        for kp in keypoints:
-            cv2.circle(img, 
-                      (int(kp[0]) + offset_x, int(kp[1])), 
-                      3, (0, 255, 0), -1)
-        # Draw edges
-        for edge in G.edges():
-            pt1 = tuple(map(int, keypoints[edge[0]]))
-            pt2 = tuple(map(int, keypoints[edge[1]]))
-            cv2.line(img, 
-                    (pt1[0] + offset_x, pt1[1]),
-                    (pt2[0] + offset_x, pt2[1]),
-                    (255, 0, 0), 1)
-
-    # Draw graphs
-    draw_graph(vis_img, G_curr, curr_frame.keypoints, 0)
-    draw_graph(vis_img, G_prev, prev_delaunay_frame.keypoints, w1)
-    draw_graph(vis_img, G_compare, compare_frame.keypoints, w1+w2)
-    
-    # Add labels
+    # Add text labels
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(vis_img, f'Current ({len(G_curr.edges())} edges)', 
-                (10, 30), font, 1, (255,255,255), 2)
-    cv2.putText(vis_img, f'Keyframe ({len(G_prev.edges())} edges)', 
-                (w1+10, 30), font, 1, (255,255,255), 2)
-    cv2.putText(vis_img, f'Compare ({len(G_compare.edges())} edges)', 
-                (w1+w2+10, 30), font, 1, (255,255,255), 2)
+    cv2.putText(combined_img, f'Prev KF (id:{prev_delaunay_frame.id})', (10, 30), font, 0.8, (255,255,255), 2)
+    cv2.putText(combined_img, f'Current (id:{curr_frame.id})', (w_prev+10, 30), font, 0.8, (255,255,255), 2)
+    cv2.putText(combined_img, f'Compare (id:{compare_frame.id})', (w_prev+w_curr+10, 30), font, 0.8, (255,255,255), 2)
     
-    # Show visualization
-    cv2.imshow("Delaunay Graphs Comparison", vis_img)
+    # Add edge count information
+    cv2.putText(combined_img, f'Edges: {len(G_prev_temp.edges())}', (10, 60), font, 0.8, (255,255,255), 2)
+    cv2.putText(combined_img, f'Edges: {len(G_curr.edges())}', (w_prev+10, 60), font, 0.8, (255,255,255), 2)
+    cv2.putText(combined_img, f'Edges: {len(G_compare.edges())}', (w_prev+w_curr+10, 60), font, 0.8, (255,255,255), 2)
+    
+    # Add a legend for the colors
+    cv2.rectangle(combined_img, (10, 90), (30, 110), (0, 0, 255), -1)  # Red
+    cv2.putText(combined_img, "Previous frame edges", (35, 105), font, 0.6, (255,255,255), 1)
+    
+    cv2.rectangle(combined_img, (10, 120), (30, 140), (0, 255, 0), -1)  # Green
+    cv2.putText(combined_img, "Current frame edges", (35, 135), font, 0.6, (255,255,255), 1)
+    
+    cv2.rectangle(combined_img, (10, 150), (30, 170), (255, 0, 0), -1)  # Blue
+    cv2.putText(combined_img, "Compare frame edges", (35, 165), font, 0.6, (255,255,255), 1)
+    
+    # Show the combined visualization
+    cv2.imshow("Delaunay Edge Correspondence", combined_img)
     cv2.waitKey(1)
     
-    return G_curr, G_prev, G_compare, curr_frame, prev_delaunay_frame, compare_frame
-
+    # Store graphs in respective frames for future use
+    curr_frame._delaunay = G_curr
+    compare_frame._delaunay = G_compare
+    
+    return G_curr, G_prev_temp, G_compare
 
 def get_static_dynamic_edges(curr_frame, slam):
     return 0
