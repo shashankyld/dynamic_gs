@@ -237,5 +237,19 @@ class Frame:
                            depth], axis=-1)
         return points
     
+    def get_kps_with_good_depth(self, min_depth= 0, max_depth=1000000):
+        """Get keypoints with depth within specified range"""
+        if self.keypoints is None or self._depth is None:
+            return None
+            
+        x = self.keypoints[:, 0]
+        y = self.keypoints[:, 1]
+        x = x.astype(int)
+        y = y.astype(int)
+        depth = self._depth[y, x]
+        valid_mask = (depth > min_depth) & (depth < max_depth)
+        return self.keypoints[valid_mask]
+    
+    
     
     

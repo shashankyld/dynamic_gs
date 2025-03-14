@@ -534,11 +534,41 @@ def get_static_dynamic_edges(curr_frame, slam):
         return None, None
         
     #
+    # For each idx in curr, prev, compare, if the depth is invalid in their respective frames, remove them from the common_matches
+    curr_depth = curr_frame._depth
+    prev_depth = prev_delaunay_frame._depth
+    compare_depth = compare_frame._depth
+
+
+    def check_depth(frame, idx, depth):
+        kp = frame.keypoints[idx]
+        x, y = int(kp[0]), int(kp[1])
+        if 0 <= x < depth.shape[1] and 0 <= y < depth.shape[0]:
+            return depth[y, x] == 0
+        return True
+    
+    common_matches_with_good_depth = []
+    for idx in range(len(common_matches)):
+        curr_idx = common_matches[idx, 0]
+        prev_idx = common_matches[idx, 1]
+        compare_idx = common_matches[idx, 2]
+        if check_depth(curr_frame, curr_idx, curr_depth) or check_depth(prev_delaunay_frame, prev_idx, prev_depth) or check_depth(compare_frame, compare_idx, compare_depth):
+            continue
+        common_matches_with_good_depth.append([curr_idx, prev_idx, compare_idx])
+
+    common_matches= np.array(common_matches_with_good_depth, dtype=np.int32)
+    print("Common Matches with good depth: ", common_matches_with_good_depth)
+
+
+
+
     print("Common Matches: ", common_matches)
     curr_kp_idxs = common_matches[:, 0]
     prev_kp_idxs = common_matches[:, 1]
     compare_kp_idxs = common_matches[:, 2]
 
+
+    
     camera_matrix = curr_frame.camera_matrix
     # Fake Prev_KF 
     fake_kf = Frame(frame_id=prev_delaunay_frame.id, timestamp=prev_delaunay_frame.timestamp, camera_matrix=camera_matrix)
@@ -551,6 +581,7 @@ def get_static_dynamic_edges(curr_frame, slam):
     fake_curr._image = curr_frame.image
     fake_curr._depth = curr_frame.depth
     fake_curr.keypoints = curr_frame.keypoints[curr_kp_idxs]
+    
 
     # Fake Compare Frame
     fake_compare = Frame(frame_id=compare_frame.id, timestamp=compare_frame.timestamp  , camera_matrix=camera_matrix)
@@ -588,7 +619,7 @@ def get_static_dynamic_edges(curr_frame, slam):
     # Only for the current frame
 
     # Create a binary mask for valid depth
-    depth_valid = (curr_frame._depth > 0).astype(np.uint8) * 255
+    depth_valid = (fake_curr._depth > 0).astype(np.uint8) * 255
 
     # Convert to 3-channel for visualization
     depth_vis = cv2.cvtColor(depth_valid, cv2.COLOR_GRAY2BGR)
@@ -597,12 +628,12 @@ def get_static_dynamic_edges(curr_frame, slam):
     non_zero_depth_count = 0
 
     # Ensure we have keypoints
-    if curr_frame.keypoints is not None:
-        for kp in curr_frame.keypoints:
+    if fake_curr.keypoints is not None:
+        for kp in fake_curr.keypoints:
             x, y = int(kp[0]), int(kp[1])
             # Check image bounds
-            if 0 <= x < curr_frame._depth.shape[1] and 0 <= y < curr_frame._depth.shape[0]:
-                if curr_frame._depth[y, x] > 0:
+            if 0 <= x < fake_curr._depth.shape[1] and 0 <= y < fake_curr._depth.shape[0]:
+                if fake_curr._depth[y, x] > 0:
                     non_zero_depth_count += 1
                     color = (0, 255, 0)  # Green circle for valid depth
                 else:
@@ -620,7 +651,7 @@ def get_static_dynamic_edges(curr_frame, slam):
 
     axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
 
-    full_pc_pts, full_pc_colors = curr_frame.get_points()
+    full_pc_pts, full_pc_colors = fake_curr.get_points()
     full_pc = o3d.geometry.PointCloud()
     full_pc.points = o3d.utility.Vector3dVector(full_pc_pts)
     full_pc.colors = o3d.utility.Vector3dVector(full_pc_colors)
