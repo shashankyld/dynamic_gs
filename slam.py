@@ -166,7 +166,7 @@ if __name__ == "__main__":
                         matches_curr_prev, matches_curr_k, matches_prev_k, common_matches = \
                             matches_with_k_frames_away_with_prev_delaunay_edges(curr_frame, slam, kNumFramesAway)
                             
-                        G_all_frames(curr_frame=curr_frame, slam=slam)
+                        # G_all_frames(curr_frame=curr_frame, slam=slam)
                         get_static_dynamic_edges(curr_frame, slam)
                         
 

@@ -202,3 +202,39 @@ class Frame:
     def dynamic_mask(self) -> Optional[np.ndarray]:
         return self._dynamic_mask
         
+    def get_3d_kps(self) -> np.ndarray:
+        """Get 3D keypoints from depth image"""
+        if self.keypoints is None or self._depth is None:
+            return None
+            
+        # Get 3D points from depth
+        x = self.keypoints[:, 0]
+        y = self.keypoints[:, 1]
+        # Convert to int    
+        x = x.astype(int)
+        y = y.astype(int)
+        depth = self._depth[y, x]
+        points = np.stack([(x - self.cx) * depth / self.fx,
+                          (y - self.cy) * depth / self.fy,
+                           depth], axis=-1)
+        return points
+    
+    def get_3d_kps_from_idxs(self,idxs) -> np.ndarray:
+        """Get 3D keypoints from depth image"""
+        if self.keypoints is None or self._depth is None:
+            return None
+            
+        # Get 3D points from depth
+        x = self.keypoints[idxs, 0]
+        y = self.keypoints[idxs, 1]
+        # Convert to int    
+        x = x.astype(int)
+        y = y.astype(int)
+        depth = self._depth[y, x]
+        points = np.stack([(x - self.cx) * depth / self.fx,
+                          (y - self.cy) * depth / self.fy,
+                           depth], axis=-1)
+        return points
+    
+
+    

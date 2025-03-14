@@ -3,7 +3,7 @@
 DATASET:
   # select your dataset (decomment only one of the following lines) 
   #type: EUROC_DATASET  
-  #type: KITTI_DATASET
+  # type: KITTI_DATASET
   type: TUM_DATASET
   # type: BONN_DATASET
   #type: REPLICA_DATASET
@@ -36,11 +36,11 @@ TUM_DATASET:
   # name: rgbd_dataset_freiburg3_long_office_household
   # settings: dataset/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
   #
-  name: rgbd_dataset_freiburg1_desk
-  settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
+  # name: rgbd_dataset_freiburg1_desk
+  # settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
   #
-  # name: rgbd_dataset_freiburg3_walking_xyz  # do not use this for mono, there are some in-place rotations during exploratory phases
-  # settings: dataset/TUM3.yaml # do not forget to set the corresponding camera settings file 
+  name: rgbd_dataset_freiburg3_walking_xyz  # do not use this for mono, there are some in-place rotations during exploratory phases
+  settings: dataset/TUM3.yaml # do not forget to set the corresponding camera settings file 
   #
   associations: associations.txt
   groundtruth_file: auto
@@ -84,12 +84,12 @@ BONN_DATASET:
   #name: rgbd_dataset_freiburg3_long_office_household
   #settings: dataset/TUM3.yaml # do not forget to correctly set the corresponding camera settings file    
   #
-  #name: rgbd_dataset_freiburg1_xyz 
-  #settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
+  name: rgbd_dataset_freiburg1_xyz 
+  settings: dataset/TUM1.yaml # do not forget to correctly set the corresponding camera settings file
   #
   # name: rgbd_bonn_static_close_far # do not use this for mono, there are some in-place rotations during exploratory phases # DATA FROM LEGION
-  name: rgbd_bonn_crowd ## DATA FROM LAB
-  settings: dataset/rgbd_bonn.yaml # do not forget to set the corresponding camera settings file 
+  # name: rgbd_bonn_crowd ## DATA FROM LAB
+  # settings: dataset/rgbd_bonn.yaml # do not forget to set the corresponding camera settings file 
   #Parameters  
   associations: associations.txt
   groundtruth_file: auto

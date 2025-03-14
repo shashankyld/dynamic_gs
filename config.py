@@ -66,6 +66,7 @@ class Config(object):
         self.MIN_KEYFRAME_MATCHES = slam_parameters.SlamParameters.MIN_KEYFRAME_MATCHES
         self.NUM_LOCAL_KEYFRAMES = slam_parameters.SlamParameters.NUM_LOCAL_KEYFRAMES
         self.NUM_FEATURES = slam_parameters.SlamParameters.NUM_FEATURES
+        self.DYNAMIC_EDGE_THRESHOLD = slam_parameters.SlamParameters.kDynamicEdgeThreshold
         
         self.get_dataset_settings()
         self.get_cam_settings()
